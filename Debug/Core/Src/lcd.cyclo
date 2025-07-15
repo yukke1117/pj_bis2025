@@ -1,0 +1,6 @@
+../Core/Src/lcd.c:14:20:LCD_SELECT	1
+../Core/Src/lcd.c:15:20:LCD_UNSELECT	1
+../Core/Src/lcd.c:16:20:lcd_tx	1
+../Core/Src/lcd.c:21:6:LCD_Init	1
+../Core/Src/lcd.c:32:6:LCD_AllClear	1
+../Core/Src/lcd.c:40:6:LCD_SendLine4bit	1
