@@ -160,7 +160,6 @@ int main(void)
   {
 
 	  LCD_BounceText(msg, y);
-	      HAL_Delay(30); // 30ms待つ
 
 	      y += dy;
 	      if (y <= 0 || y >= (176 - 8)) { // 画面端で反転（8は文字高さ）
