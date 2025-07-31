@@ -44,7 +44,12 @@
 COM_InitTypeDef BspCOMInit;
 __IO uint32_t BspButtonState = BUTTON_RELEASED;
 
+DAC_HandleTypeDef hdac1;
+
+OPAMP_HandleTypeDef hopamp1;
+
 SPI_HandleTypeDef hspi1;
+SPI_HandleTypeDef hspi2;
 
 TIM_HandleTypeDef htim3;
 
@@ -56,7 +61,67 @@ UART_HandleTypeDef huart5;
   static uint16_t bounce_y = 50;
   static int8_t bounce_direction = 1;
   static uint8_t blink_state = 1;
-  /* USER CODE END PV */
+
+  // ADS1299のSPIハンドル (MX_SPI1_Init()で初期化されるもの)
+  extern SPI_HandleTypeDef hspi1;
+  #define ADS_SPI_HANDLE &hspi1
+
+  // GPIOピンの定義 (CubeMXの"Pinout & Configuration"で設定したUser Labelと一致させる)
+  #define ADS_CS_PORT     ADC_CS_GPIO_Port
+  #define ADS_CS_PIN      ADC_CS_Pin
+  #define ADS_RESET_PORT  ADC_RESET_GPIO_Port
+  #define ADS_RESET_PIN   ADC_RESET_Pin
+  #define ADS_DRDY_PORT   ADC_DRDY_GPIO_Port
+  #define ADS_DRDY_PIN    ADC_DRDY_Pin
+
+  // UARTデバッグ用 (MX_UART5_Init()で初期化されるもの)
+  extern UART_HandleTypeDef huart5;
+  #define ADS_UART_HANDLE &huart5
+
+  // コマンドとレジスタの定義
+  // ADS1299のコマンド
+  // System Commands
+  #define CMD_WAKEUP    0x02
+  #define CMD_STANDBY   0x04
+  #define CMD_RESET     0x06
+  #define CMD_START     0x08
+  #define CMD_STOP      0x0A
+  // Data Read Commands
+  #define CMD_RDATAC    0x10
+  #define CMD_SDATAC    0x11
+  #define CMD_RDATA     0x12
+  // Register Read Commands
+  #define CMD_RREG      0x20
+  #define CMD_WREG      0x40
+
+
+  // ADS1299のレジスタアドレス
+  #define REG_ID        0x00
+  #define REG_CONFIG1   0x01
+  #define REG_CONFIG2   0x02
+  #define REG_CONFIG3   0x03
+  #define REG_LOFF      0x04
+  #define REG_CH1SET    0x05
+  #define REG_CH2SET    0x06
+  #define REG_CH3SET    0x07
+  #define REG_CH4SET    0x08
+  #define REG_CH5SET    0x09
+  #define REG_CH6SET    0x0A
+  #define REG_CH7SET    0x0B
+  #define REG_CH8SET    0x0C
+  #define REG_BIAS_SENSP 0x0D
+  #define REG_BIAS_SENSN 0x0E
+  #define REG_LOFF_SENSP 0x0F
+  #define REG_LOFF_SENSN 0x10
+  #define REG_LOFF_FLIP 0x11
+  #define REG_LOFF_STATP 0x12
+  #define REG_LOFF_STATN 0x13
+  #define REG_GPIO       0x14
+  #define REG_MISC1      0x15
+  #define REG_MISC2      0x16
+  #define REG_CONFIG4    0x17
+
+/* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
@@ -64,7 +129,15 @@ static void MX_GPIO_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_UART5_Init(void);
 static void MX_TIM3_Init(void);
+static void MX_SPI2_Init(void);
+static void MX_DAC1_Init(void);
+static void MX_OPAMP1_Init(void);
 /* USER CODE BEGIN PFP */
+
+static void ads_send_command(uint8_t cmd);
+static void ads_write_reg(uint8_t addr, uint8_t data);
+static void ads_init(void);
+static int32_t ads_read_ch1_data(void);
 
 /* USER CODE END PFP */
 
@@ -105,6 +178,9 @@ int main(void)
   MX_SPI1_Init();
   MX_UART5_Init();
   MX_TIM3_Init();
+  MX_SPI2_Init();
+  MX_DAC1_Init();
+  MX_OPAMP1_Init();
   /* USER CODE BEGIN 2 */
 
   /* 1) EXTCOMIN (PC8) の 1 Hz PWM 出力を開始 */
@@ -206,7 +282,9 @@ void SystemClock_Config(void)
 
   /** Initializes the CPU, AHB and APB buses clocks
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_MSIS;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_LSI|RCC_OSCILLATORTYPE_MSIS;
+  RCC_OscInitStruct.LSIState = RCC_LSI_ON;
+  RCC_OscInitStruct.LSIDiv = RCC_LSI_DIV1;
   RCC_OscInitStruct.MSISState = RCC_MSI_ON;
   RCC_OscInitStruct.MSISSource = RCC_MSI_RC0;
   RCC_OscInitStruct.MSISDiv = RCC_MSI_DIV1;
@@ -230,6 +308,91 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief DAC1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_DAC1_Init(void)
+{
+
+  /* USER CODE BEGIN DAC1_Init 0 */
+
+  /* USER CODE END DAC1_Init 0 */
+
+  DAC_ChannelConfTypeDef sConfig = {0};
+  DAC_AutonomousModeConfTypeDef sAutonomousMode = {0};
+
+  /* USER CODE BEGIN DAC1_Init 1 */
+
+  /* USER CODE END DAC1_Init 1 */
+
+  /** DAC Initialization
+  */
+  hdac1.Instance = DAC1;
+  if (HAL_DAC_Init(&hdac1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** DAC channel OUT1 config
+  */
+  sConfig.DAC_HighFrequency = DAC_HIGH_FREQUENCY_INTERFACE_MODE_DISABLE;
+  sConfig.DAC_DMADoubleDataMode = DISABLE;
+  sConfig.DAC_SignedFormat = DISABLE;
+  sConfig.DAC_SampleAndHold = DAC_SAMPLEANDHOLD_DISABLE;
+  sConfig.DAC_Trigger = DAC_TRIGGER_NONE;
+  sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_ENABLE;
+  sConfig.DAC_ConnectOnChipPeripheral = DAC_CHIPCONNECT_EXTERNAL;
+  sConfig.DAC_UserTrimming = DAC_TRIMMING_FACTORY;
+  if (HAL_DAC_ConfigChannel(&hdac1, &sConfig, DAC_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Autonomous Mode
+  */
+  sAutonomousMode.AutonomousModeState = DAC_AUTONOMOUS_MODE_DISABLE;
+  if (HAL_DACEx_SetConfigAutonomousMode(&hdac1, &sAutonomousMode) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN DAC1_Init 2 */
+
+  /* USER CODE END DAC1_Init 2 */
+
+}
+
+/**
+  * @brief OPAMP1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_OPAMP1_Init(void)
+{
+
+  /* USER CODE BEGIN OPAMP1_Init 0 */
+
+  /* USER CODE END OPAMP1_Init 0 */
+
+  /* USER CODE BEGIN OPAMP1_Init 1 */
+
+  /* USER CODE END OPAMP1_Init 1 */
+  hopamp1.Instance = OPAMP1;
+  hopamp1.Init.Mode = OPAMP_FOLLOWER_MODE;
+  hopamp1.Init.NonInvertingInput = OPAMP_NONINVERTINGINPUT_IO0;
+  hopamp1.Init.PowerMode = OPAMP_POWERMODE_NORMALPOWER_NORMALSPEED;
+  hopamp1.Init.UserTrimming = OPAMP_TRIMMING_FACTORY;
+  if (HAL_OPAMP_Init(&hopamp1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN OPAMP1_Init 2 */
+
+  /* USER CODE END OPAMP1_Init 2 */
+
 }
 
 /**
@@ -286,6 +449,63 @@ static void MX_SPI1_Init(void)
   /* USER CODE BEGIN SPI1_Init 2 */
 
   /* USER CODE END SPI1_Init 2 */
+
+}
+
+/**
+  * @brief SPI2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_SPI2_Init(void)
+{
+
+  /* USER CODE BEGIN SPI2_Init 0 */
+
+  /* USER CODE END SPI2_Init 0 */
+
+  SPI_AutonomousModeConfTypeDef HAL_SPI_AutonomousMode_Cfg_Struct = {0};
+
+  /* USER CODE BEGIN SPI2_Init 1 */
+
+  /* USER CODE END SPI2_Init 1 */
+  /* SPI2 parameter configuration*/
+  hspi2.Instance = SPI2;
+  hspi2.Init.Mode = SPI_MODE_MASTER;
+  hspi2.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi2.Init.DataSize = SPI_DATASIZE_4BIT;
+  hspi2.Init.CLKPolarity = SPI_POLARITY_LOW;
+  hspi2.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi2.Init.NSS = SPI_NSS_SOFT;
+  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+  hspi2.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  hspi2.Init.TIMode = SPI_TIMODE_DISABLE;
+  hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  hspi2.Init.CRCPolynomial = 0x7;
+  hspi2.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
+  hspi2.Init.NSSPolarity = SPI_NSS_POLARITY_LOW;
+  hspi2.Init.FifoThreshold = SPI_FIFO_THRESHOLD_01DATA;
+  hspi2.Init.MasterSSIdleness = SPI_MASTER_SS_IDLENESS_00CYCLE;
+  hspi2.Init.MasterInterDataIdleness = SPI_MASTER_INTERDATA_IDLENESS_00CYCLE;
+  hspi2.Init.MasterReceiverAutoSusp = SPI_MASTER_RX_AUTOSUSP_DISABLE;
+  hspi2.Init.MasterKeepIOState = SPI_MASTER_KEEP_IO_STATE_DISABLE;
+  hspi2.Init.IOSwap = SPI_IO_SWAP_DISABLE;
+  hspi2.Init.ReadyMasterManagement = SPI_RDY_MASTER_MANAGEMENT_INTERNALLY;
+  hspi2.Init.ReadyPolarity = SPI_RDY_POLARITY_HIGH;
+  if (HAL_SPI_Init(&hspi2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  HAL_SPI_AutonomousMode_Cfg_Struct.TriggerState = SPI_AUTO_MODE_DISABLE;
+  HAL_SPI_AutonomousMode_Cfg_Struct.TriggerSelection = SPI_GRP1_GPDMA_CH0_TCF_TRG;
+  HAL_SPI_AutonomousMode_Cfg_Struct.TriggerPolarity = SPI_TRIG_POLARITY_RISING;
+  if (HAL_SPIEx_SetConfigAutonomousMode(&hspi2, &HAL_SPI_AutonomousMode_Cfg_Struct) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN SPI2_Init 2 */
+
+  /* USER CODE END SPI2_Init 2 */
 
 }
 
@@ -411,14 +631,20 @@ static void MX_GPIO_Init(void)
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
-  __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOD_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, LCD_CS_Pin|LCD_DISP_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, ADC_RESET_Pin|ADC_CS_Pin|LCD_CS_Pin|LCD_DISP_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pins : LCD_CS_Pin LCD_DISP_Pin */
-  GPIO_InitStruct.Pin = LCD_CS_Pin|LCD_DISP_Pin;
+  /*Configure GPIO pin : ADC_DRDY_Pin */
+  GPIO_InitStruct.Pin = ADC_DRDY_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(ADC_DRDY_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : ADC_RESET_Pin ADC_CS_Pin LCD_CS_Pin LCD_DISP_Pin */
+  GPIO_InitStruct.Pin = ADC_RESET_Pin|ADC_CS_Pin|LCD_CS_Pin|LCD_DISP_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
