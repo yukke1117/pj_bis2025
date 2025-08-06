@@ -7,6 +7,7 @@ void LCD_Init(void);
 void LCD_AllClear(void);
 void LCD_SendLine4bit(uint16_t y, const uint8_t *buf);
 void LCD_DrawString4bit(uint16_t y0, const char *str);
+void LCD_DrawImage(void);
 
 /* アニメーション関数 */
 void LCD_ScrollText(uint16_t y0, const char *str, uint16_t scroll_offset);

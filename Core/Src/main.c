@@ -18,6 +18,11 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "lcd.h"
+#include "font8x8_basic.h"
+#include <string.h>
+#include "Image.h"
+
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -43,6 +48,7 @@
 
 COM_InitTypeDef BspCOMInit;
 __IO uint32_t BspButtonState = BUTTON_RELEASED;
+ADC_HandleTypeDef hadc1;
 
 DAC_HandleTypeDef hdac1;
 
@@ -61,10 +67,18 @@ UART_HandleTypeDef huart5;
   static uint16_t bounce_y = 50;
   static int8_t bounce_direction = 1;
   static uint8_t blink_state = 1;
+  
+  // UART buffer for ADS1299 debug output
+  static char uart_buf[100];
 
-  // ADS1299のSPIハンドル (MX_SPI1_Init()で初期化されるもの)
-  extern SPI_HandleTypeDef hspi1;
-  #define ADS_SPI_HANDLE &hspi1
+  // DAC and ADC test variables
+  static uint32_t dac_value = 0;
+  static uint32_t adc_value = 0;
+  static uint8_t dac_direction = 1; // 1 for increasing, 0 for decreasing
+
+  // ADS1299のSPIハンドル (MX_SPI2_Init()で初期化されるもの)
+  extern SPI_HandleTypeDef hspi2;
+  #define ADS_SPI_HANDLE &hspi2
 
   // GPIOピンの定義 (CubeMXの"Pinout & Configuration"で設定したUser Labelと一致させる)
   #define ADS_CS_PORT     ADC_CS_GPIO_Port
@@ -96,11 +110,14 @@ UART_HandleTypeDef huart5;
 
 
   // ADS1299のレジスタアドレス
+  // Read ONly ID Registers
   #define REG_ID        0x00
+  // Global Settings Across Channels
   #define REG_CONFIG1   0x01
   #define REG_CONFIG2   0x02
   #define REG_CONFIG3   0x03
   #define REG_LOFF      0x04
+  // Channel Settings
   #define REG_CH1SET    0x05
   #define REG_CH2SET    0x06
   #define REG_CH3SET    0x07
@@ -114,8 +131,10 @@ UART_HandleTypeDef huart5;
   #define REG_LOFF_SENSP 0x0F
   #define REG_LOFF_SENSN 0x10
   #define REG_LOFF_FLIP 0x11
+  // Lead-OFff Status Registers
   #define REG_LOFF_STATP 0x12
   #define REG_LOFF_STATN 0x13
+  // GPIO and OTHER Registers
   #define REG_GPIO       0x14
   #define REG_MISC1      0x15
   #define REG_MISC2      0x16
@@ -132,10 +151,12 @@ static void MX_TIM3_Init(void);
 static void MX_SPI2_Init(void);
 static void MX_DAC1_Init(void);
 static void MX_OPAMP1_Init(void);
+static void MX_ADC1_Init(void);
 /* USER CODE BEGIN PFP */
 
 static void ads_send_command(uint8_t cmd);
 static void ads_write_reg(uint8_t addr, uint8_t data);
+static uint8_t ads_read_reg(uint8_t addr);
 static void ads_init(void);
 static int32_t ads_read_ch1_data(void);
 
@@ -181,31 +202,62 @@ int main(void)
   MX_SPI2_Init();
   MX_DAC1_Init();
   MX_OPAMP1_Init();
+  MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
 
-  /* 1) EXTCOMIN (PC8) の 1 Hz PWM 出力を開始 */
-  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
-
-  /* 2) LCD_DISP (PC10) で LCD をリセット解除 */
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);   // Low: Reset
-  HAL_Delay(1);
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);     // High: Run
-
-  /* 3) LCD ドライバ初期化（ALL CLEAR コマンドなど） */
+  printf("Starting DAC/ADC/LCD Test System...\r\n");
+  
+  // LCD初期化
   LCD_Init();
+  printf("LCD Initialized\r\n");
 
-  /* 4) 画面をクリア */
+  // 画像を表示
+  LCD_DrawImage();
+  HAL_Delay(3000);
   LCD_AllClear();
 
-  /* 5) 固定文字列を描画 */
-  for (uint16_t offset = 0; offset < 176 + strlen("HELLO WORLD") * 8; offset++) {
-      LCD_ScrollText(16, "HELLO WORLD", -offset);
-      HAL_Delay(20); // 20ms待つ（速度調整）
+  // LCD初期表示
+  LCD_DrawString4bit(10, "DAC/ADC Test");
+  LCD_DrawString4bit(30, "System Ready");
+  
+  // Start DAC
+  if (HAL_DAC_Start(&hdac1, DAC_CHANNEL_1) != HAL_OK) {
+      printf("DAC Start Error!\r\n");
+      LCD_DrawString4bit(50, "DAC Error");
+      Error_Handler();
   }
-  const char *msg = "BOUNCE!";
-  int y = 0;
-  int dy = 5; // 移動量
+  printf("DAC Channel 1 Started\r\n");
+  
+  // Start OPAMP
+  if (HAL_OPAMP_Start(&hopamp1) != HAL_OK) {
+      printf("OPAMP Start Error!\r\n");
+      LCD_DrawString4bit(70, "OPAMP Error");
+      Error_Handler();
+  }
+  printf("OPAMP Started\r\n");
+  
+  // Calibrate ADC
+  if (HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED) != HAL_OK) {
+      printf("ADC Calibration Error!\r\n");
+      LCD_DrawString4bit(90, "ADC Error");
+      Error_Handler();
+  }
+  printf("ADC Calibrated and Ready\r\n");
 
+  // Set initial DAC value
+  dac_value = 2048; // Middle value (1.65V for 3.3V reference)
+  HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, dac_value);
+  printf("Initial DAC value set to: %lu (should be ~1.65V)\r\n", dac_value);
+
+  printf("Starting ID Register Read Test...\r\n");
+
+  // 一度リセット
+  HAL_GPIO_WritePin(ADS_RESET_PORT, ADS_RESET_PIN, GPIO_PIN_SET);
+  HAL_Delay(10);
+  HAL_GPIO_WritePin(ADS_RESET_PORT, ADS_RESET_PIN, GPIO_PIN_RESET);
+  HAL_Delay(1);
+  HAL_GPIO_WritePin(ADS_RESET_PORT, ADS_RESET_PIN, GPIO_PIN_SET);
+  HAL_Delay(10);
 
   /* USER CODE END 2 */
 
@@ -234,13 +286,94 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    // DAC/ADC Test Loop with LCD Display
+    // Generate a slowly changing DAC output (triangle wave)
+    if (dac_direction == 1) {
+        dac_value += 50; // Increase DAC value
+        if (dac_value >= 4095) {
+            dac_direction = 0; // Change direction at max
+        }
+    } else {
+        dac_value -= 50; // Decrease DAC value
+        if (dac_value <= 0) {
+            dac_direction = 1; // Change direction at min
+        }
+    }
+    
+    // Set new DAC value
+    HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, dac_value);
+    
+    // Read ADC value from the DAC output (via OPAMP follower)
+    if (HAL_ADC_Start(&hadc1) != HAL_OK) {
+        printf("ADC Start Error!\r\n");
+    }
+    
+    // Wait for ADC conversion to complete
+    if (HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY) == HAL_OK) {
+        adc_value = HAL_ADC_GetValue(&hadc1);
+        
+        // Calculate voltage values for display
+        float dac_voltage = (float)dac_value * 3.3f / 4095.0f;
+        float adc_voltage = (float)adc_value * 3.3f / 4095.0f;
+        
+        // Output DAC and ADC values via UART
+        printf("DAC: %lu (%.3fV) -> ADC: %lu (%.3fV)\r\n", 
+               dac_value, dac_voltage, adc_value, adc_voltage);
+        
+        // Update LCD display every few iterations to avoid flicker
+        static uint32_t lcd_update_counter = 0;
+        lcd_update_counter++;
+        
+        if (lcd_update_counter % 5 == 0) { // Update LCD every 5 iterations
+            LCD_AllClear(); // Clear the screen
+            
+            // Display title
+            LCD_DrawString4bit(10, "DAC/ADC Monitor");
+            
+            // Display DAC value and voltage
+            char dac_str[22];
+            snprintf(dac_str, sizeof(dac_str), "DAC: %04lu %.3fV", dac_value, dac_voltage);
+            LCD_DrawString4bit(30, dac_str);
+            
+            // Display ADC value and voltage
+            char adc_str[22];
+            snprintf(adc_str, sizeof(adc_str), "ADC: %04lu %.3fV", adc_value, adc_voltage);
+            LCD_DrawString4bit(50, adc_str);
+            
+            // Display direction indicator
+            const char* direction_str = dac_direction == 1 ? "Direction: UP  " : "Direction: DOWN";
+            LCD_DrawString4bit(70, direction_str);
+        }
+    }
+    
+    HAL_ADC_Stop(&hadc1);
 
-	  LCD_BounceText(msg, y);
-
-	      y += dy;
-	      if (y <= 0 || y >= (176 - 8)) { // 画面端で反転（8は文字高さ）
-	          dy = -dy;
-	      }
+    // Keep existing ADS1299 functionality (reduced frequency)
+    static uint32_t ads_counter = 0;
+    ads_counter++;
+    
+    if (ads_counter % 50 == 0) { // Every 50th iteration (less frequent for better LCD performance)
+        uint8_t device_id = ads_read_reg(REG_ID);
+        printf("ADS1299 ID: 0x%02X\r\n", device_id);
+        
+        // Display ADS1299 info on LCD
+        char ads_str[22];
+        snprintf(ads_str, sizeof(ads_str), "ADS ID: 0x%02X", device_id);
+        LCD_DrawString4bit(90, ads_str);
+        
+        // Check DRDY pin and read data if available
+        if (HAL_GPIO_ReadPin(ADS_DRDY_PORT, ADS_DRDY_PIN) == GPIO_PIN_RESET) {
+            int32_t ch1_val = ads_read_ch1_data();
+            printf("ADS CH1: %ld\r\n", ch1_val);
+            
+            // Display ADS1299 CH1 data on LCD
+            char ch1_str[22];
+            snprintf(ch1_str, sizeof(ch1_str), "CH1: %ld", ch1_val);
+            LCD_DrawString4bit(110, ch1_str);
+        }
+    }
+    
+    HAL_Delay(100); // 100ms delay for readable output
 
     /* USER CODE END WHILE */
 
@@ -308,6 +441,67 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+
+  /** MCO1 configuration
+  */
+  HAL_RCC_MCOConfig(RCC_MCO1, RCC_MCO1SOURCE_SYSCLK, RCC_MCODIV_64);
+}
+
+/**
+  * @brief ADC1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_ADC1_Init(void)
+{
+
+  /* USER CODE BEGIN ADC1_Init 0 */
+
+  /* USER CODE END ADC1_Init 0 */
+
+  ADC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN ADC1_Init 1 */
+
+  /* USER CODE END ADC1_Init 1 */
+
+  /** Common config
+  */
+  hadc1.Instance = ADC1;
+  hadc1.Init.Resolution = ADC_RESOLUTION_12B;
+  hadc1.Init.GainCompensation = 0;
+  hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
+  hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  hadc1.Init.LowPowerAutoWait = DISABLE;
+  hadc1.Init.ContinuousConvMode = DISABLE;
+  hadc1.Init.NbrOfConversion = 1;
+  hadc1.Init.DiscontinuousConvMode = DISABLE;
+  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+  hadc1.Init.Overrun = ADC_OVR_DATA_PRESERVED;
+  hadc1.Init.LeftBitShift = ADC_LEFTBITSHIFT_NONE;
+  hadc1.Init.ConversionDataManagement = ADC_CONVERSIONDATA_DR;
+  hadc1.Init.OversamplingMode = DISABLE;
+  if (HAL_ADC_Init(&hadc1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_1;
+  sConfig.Rank = ADC_REGULAR_RANK_1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
+  sConfig.OffsetNumber = ADC_OFFSET_NONE;
+  sConfig.Offset = 0;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN ADC1_Init 2 */
+
+  /* USER CODE END ADC1_Init 2 */
+
 }
 
 /**
@@ -473,16 +667,16 @@ static void MX_SPI2_Init(void)
   hspi2.Instance = SPI2;
   hspi2.Init.Mode = SPI_MODE_MASTER;
   hspi2.Init.Direction = SPI_DIRECTION_2LINES;
-  hspi2.Init.DataSize = SPI_DATASIZE_4BIT;
+  hspi2.Init.DataSize = SPI_DATASIZE_8BIT;
   hspi2.Init.CLKPolarity = SPI_POLARITY_LOW;
-  hspi2.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi2.Init.CLKPhase = SPI_PHASE_2EDGE;
   hspi2.Init.NSS = SPI_NSS_SOFT;
-  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_32;
   hspi2.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi2.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
   hspi2.Init.CRCPolynomial = 0x7;
-  hspi2.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
+  hspi2.Init.NSSPMode = SPI_NSS_PULSE_DISABLE;
   hspi2.Init.NSSPolarity = SPI_NSS_POLARITY_LOW;
   hspi2.Init.FifoThreshold = SPI_FIFO_THRESHOLD_01DATA;
   hspi2.Init.MasterSSIdleness = SPI_MASTER_SS_IDLENESS_00CYCLE;
@@ -650,12 +844,140 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
+  /*Configure GPIO pin : PA8 */
+  GPIO_InitStruct.Pin = GPIO_PIN_8;
+  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+  GPIO_InitStruct.Alternate = GPIO_AF0_MCO;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
   /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
+
+/**
+  * @brief  ADS1299に単一コマンドを送信する
+  * @param  cmd 送信するコマンド
+  * @retval None
+  */
+static void ads_send_command(uint8_t cmd) {
+    HAL_GPIO_WritePin(ADS_CS_PORT, ADS_CS_PIN, GPIO_PIN_RESET);
+    HAL_Delay(1); // 最小限の遅延
+    HAL_SPI_Transmit(ADS_SPI_HANDLE, &cmd, 1, HAL_MAX_DELAY);
+    HAL_Delay(1);
+    HAL_GPIO_WritePin(ADS_CS_PORT, ADS_CS_PIN, GPIO_PIN_SET);
+}
+
+/**
+  * @brief  ADS1299のレジスタに1バイト書き込む
+  * @param  addr レジスタアドレス
+  * @param  data 書き込むデータ
+  * @retval None
+  */
+static void ads_write_reg(uint8_t addr, uint8_t data) {
+    uint8_t tx_buf[3];
+    tx_buf[0] = CMD_WREG | addr; // WREGコマンド + アドレス
+    tx_buf[1] = 0x00;            // 書き込むレジスタ数 - 1 (今回は1つなので0)
+    tx_buf[2] = data;            // 書き込むデータ
+
+    HAL_GPIO_WritePin(ADS_CS_PORT, ADS_CS_PIN, GPIO_PIN_RESET);
+    HAL_Delay(1);
+    HAL_SPI_Transmit(ADS_SPI_HANDLE, tx_buf, 3, HAL_MAX_DELAY);
+    HAL_Delay(1);
+    HAL_GPIO_WritePin(ADS_CS_PORT, ADS_CS_PIN, GPIO_PIN_SET);
+}
+
+/**
+  * @brief  ADS1299のレジスタから1バイト読み出す
+  * @param  addr レジスタアドレス
+  * @retval 読み出したデータ
+  */
+static uint8_t ads_read_reg(uint8_t addr) {
+    uint8_t tx_buf[3];
+    uint8_t rx_buf[3] = {0};
+    
+    tx_buf[0] = CMD_RREG | addr; // RREGコマンド + アドレス
+    tx_buf[1] = 0x00;            // 読み出すレジスタ数 - 1 (今回は1つなので0)
+    tx_buf[2] = 0x00;            // ダミーバイト
+
+    HAL_GPIO_WritePin(ADS_CS_PORT, ADS_CS_PIN, GPIO_PIN_RESET);
+    HAL_Delay(1);
+    HAL_SPI_TransmitReceive(ADS_SPI_HANDLE, tx_buf, rx_buf, 3, HAL_MAX_DELAY);
+    HAL_Delay(1);
+    HAL_GPIO_WritePin(ADS_CS_PORT, ADS_CS_PIN, GPIO_PIN_SET);
+    
+    return rx_buf[2]; // 3バイト目にレジスタの値が入っている
+}
+
+/**
+  * @brief  ADS1299を初期化する
+  * @retval None
+  */
+static void ads_init(void) {
+    // 1. デバイスをリセット
+    HAL_GPIO_WritePin(ADS_RESET_PORT, ADS_RESET_PIN, GPIO_PIN_SET);
+    HAL_Delay(100);
+    HAL_GPIO_WritePin(ADS_RESET_PORT, ADS_RESET_PIN, GPIO_PIN_RESET);
+    HAL_Delay(1);
+    HAL_GPIO_WritePin(ADS_RESET_PORT, ADS_RESET_PIN, GPIO_PIN_SET);
+    HAL_Delay(100); // リセット後の安定化待ち [cite: 1713]
+
+    // 2. RDATACモードを停止
+    ads_send_command(CMD_SDATAC);
+    HAL_Delay(1);
+
+    // 3. レジスタ設定
+    // CONFIG3: 内部リファレンスを有効化
+    ads_write_reg(REG_CONFIG3, 0xE0); // PD_REFBUF=1 [cite: 2375]
+    HAL_Delay(1);
+
+    // CH1SET: CH1を有効化、ゲイン24倍、通常入力に設定
+    ads_write_reg(REG_CH1SET, 0x60); // PD1=0, GAIN=24, MUX=Normal [cite: 2460]
+    HAL_Delay(1);
+
+    // CH2-CH8をパワーダウン
+    for (int i = 0; i < 7; i++) {
+        ads_write_reg(REG_CH2SET + i, 0x81); // PDn=1, MUXn=Input Short [cite: 2460]
+        HAL_Delay(1);
+    }
+
+    // 4. 変換開始
+    ads_send_command(CMD_START); // [cite: 1961]
+}
+
+/**
+  * @brief  ADS1299のCH1データを読み出す
+  * @retval 32ビット符号付き整数に変換されたCH1のデータ
+  */
+static int32_t ads_read_ch1_data(void) {
+    uint8_t tx_cmd = CMD_RDATA;
+    uint8_t rx_buffer[27] = {0};
+    int32_t ch1_val = 0;
+
+    HAL_GPIO_WritePin(ADS_CS_PORT, ADS_CS_PIN, GPIO_PIN_RESET);
+    HAL_Delay(1);
+
+    // RDATAコマンドを送信し、同時にデータフレーム全体(27バイト)を受信する
+    HAL_SPI_TransmitReceive(ADS_SPI_HANDLE, &tx_cmd, rx_buffer, 1, HAL_MAX_DELAY);
+    HAL_SPI_Receive(ADS_SPI_HANDLE, &rx_buffer[1], 26, HAL_MAX_DELAY);
+
+    HAL_GPIO_WritePin(ADS_CS_PORT, ADS_CS_PIN, GPIO_PIN_SET);
+
+    // 受信バッファからCH1のデータ(4,5,6バイト目)を取得
+    // [cite: 1756, 1895, 1896]
+    ch1_val = (int32_t)((rx_buffer[3] << 16) | (rx_buffer[4] << 8) | rx_buffer[5]);
+
+    // 24ビットの2の補数表現を32ビットに符号拡張する
+    if (ch1_val & 0x00800000) {
+        ch1_val |= 0xFF000000;
+    }
+
+    return ch1_val;
+}
 
 /* USER CODE END 4 */
 

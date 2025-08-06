@@ -2,6 +2,7 @@
 #include "font8x8_basic.h"
 #include "main.h"
 #include <string.h>
+#include "image.h"
 
 #define PIX_ON   0b1110   /* RGB=111, D=0 → 白 */
 #define PIX_OFF  0b0000   /* 黒 */
@@ -94,5 +95,53 @@ void LCD_BlinkText(uint16_t y0, const char *str, uint8_t visible)
         for (uint8_t font_row = 0; font_row < 8; ++font_row) {
             LCD_SendLine4bit(y0 + font_row, rowbuf);
         }
+    }
+}
+
+void LCD_DrawImage(void)
+{
+    uint8_t rowbuf[88]; // 176px / 2 pixels_per_byte = 88 bytes
+
+    // The image data is 24bpp (3 bytes per pixel)
+    const uint8_t bytes_per_pixel = 3; 
+    const uint16_t bytes_per_row = Image.width * bytes_per_pixel;
+
+    for (uint16_t y = 0; y < Image.height; y++) {
+        // Clear the line buffer for the new line
+        memset(rowbuf, 0, sizeof(rowbuf));
+
+        // Get a pointer to the start of the current row in the source image
+        const uint8_t *p_src_row = &Image.data[y * bytes_per_row];
+
+        // Process each pixel in the row
+        for (uint16_t x = 0; x < Image.width; x++) {
+            // Get the R, G, B values for the current pixel
+            const uint8_t *p_pixel = &p_src_row[x * bytes_per_pixel];
+            uint8_t r = p_pixel[0];
+            uint8_t g = p_pixel[1];
+            uint8_t b = p_pixel[2];
+
+            // Convert 24bpp pixel to monochrome 4bpp pixel
+            // Using a simple luminance threshold.
+            // (R+G+B)/3 > 127
+            uint8_t pix4;
+            if ((r + g + b) > 382) { // 127 * 3 = 381
+                pix4 = PIX_ON; // White
+            } else {
+                pix4 = PIX_OFF; // Black
+            }
+
+            // Pack the 4bpp pixel into the row buffer
+            // 2 pixels per byte: even x in high nibble, odd x in low nibble
+            uint16_t byte_idx = x / 2;
+            if (x & 1) { // odd pixel
+                rowbuf[byte_idx] |= pix4; // low nibble
+            } else { // even pixel
+                rowbuf[byte_idx] |= pix4 << 4; // high nibble
+            }
+        }
+
+        // Send the packed line to the LCD
+        LCD_SendLine4bit(y, rowbuf);
     }
 }

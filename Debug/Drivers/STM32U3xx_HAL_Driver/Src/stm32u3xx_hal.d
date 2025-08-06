@@ -20,9 +20,16 @@ Drivers/STM32U3xx_HAL_Driver/Src/stm32u3xx_hal.o: \
  ../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_dma.h \
  ../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_dma_ex.h \
  ../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_cortex.h \
+ ../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_adc.h \
+ ../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_ll_adc.h \
+ ../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_adc_ex.h \
+ ../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_dac.h \
+ ../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_dac_ex.h \
  ../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_exti.h \
  ../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_flash.h \
  ../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_flash_ex.h \
+ ../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_opamp.h \
+ ../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_opamp_ex.h \
  ../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_pwr.h \
  ../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_pwr_ex.h \
  ../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_spi.h \
@@ -51,9 +58,16 @@ Drivers/STM32U3xx_HAL_Driver/Src/stm32u3xx_hal.o: \
 ../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_dma.h:
 ../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_dma_ex.h:
 ../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_cortex.h:
+../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_adc.h:
+../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_ll_adc.h:
+../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_adc_ex.h:
+../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_dac.h:
+../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_dac_ex.h:
 ../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_exti.h:
 ../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_flash.h:
 ../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_flash_ex.h:
+../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_opamp.h:
+../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_opamp_ex.h:
 ../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_pwr.h:
 ../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_pwr_ex.h:
 ../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_spi.h:
