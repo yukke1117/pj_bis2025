@@ -72,9 +72,9 @@ UART_HandleTypeDef huart5;
   static char uart_buf[100];
 
   // DAC and ADC test variables
-  static uint32_t dac_value = 0;
+  static uint32_t dac_value = 625;  // 固定値（約0.5V）
   static uint32_t adc_value = 0;
-  static uint8_t dac_direction = 1; // 1 for increasing, 0 for decreasing
+  // static uint8_t dac_direction = 1; // 1 for increasing, 0 for decreasing (不要なのでコメントアウト)
 
   // ADS1299のSPIハンドル (MX_SPI2_Init()で初期化されるもの)
   extern SPI_HandleTypeDef hspi2;
@@ -90,7 +90,7 @@ UART_HandleTypeDef huart5;
 
   // UARTデバッグ用 (MX_UART5_Init()で初期化されるもの)
   extern UART_HandleTypeDef huart5;
-  #define ADS_UART_HANDLE &huart5
+  #define ADS_UART_HANDLE &huart5s
 
   // コマンドとレジスタの定義
   // ADS1299のコマンド
@@ -245,7 +245,7 @@ int main(void)
   printf("ADC Calibrated and Ready\r\n");
 
   // Set initial DAC value
-  dac_value = 2048; // Middle value (1.65V for 3.3V reference)
+  dac_value = 625; // Middle value (1.65V for 3.3V reference)
   HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, dac_value);
   printf("Initial DAC value set to: %lu (should be ~1.65V)\r\n", dac_value);
 
@@ -288,6 +288,7 @@ int main(void)
   {
     // DAC/ADC Test Loop with LCD Display
     // Generate a slowly changing DAC output (triangle wave)
+    /*
     if (dac_direction == 1) {
         dac_value += 50; // Increase DAC value
         if (dac_value >= 4095) {
@@ -299,51 +300,60 @@ int main(void)
             dac_direction = 1; // Change direction at min
         }
     }
+    */
     
     // Set new DAC value
     HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, dac_value);
     
-    // Read ADC value from the DAC output (via OPAMP follower)
-    if (HAL_ADC_Start(&hadc1) != HAL_OK) {
-        printf("ADC Start Error!\r\n");
+    // Read ADC value from the DAC output (via OPAMP follower) - 複数回測定して平均化
+    uint32_t adc_sum = 0;
+    const uint8_t num_samples = 10; // 10回測定して平均
+    
+    for (uint8_t i = 0; i < num_samples; i++) {
+        if (HAL_ADC_Start(&hadc1) != HAL_OK) {
+            printf("ADC Start Error!\r\n");
+            break;
+        }
+        
+        if (HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY) == HAL_OK) {
+            adc_sum += HAL_ADC_GetValue(&hadc1);
+        }
+        HAL_ADC_Stop(&hadc1);
+        HAL_Delay(1); // 測定間の短い遅延
     }
     
-    // Wait for ADC conversion to complete
-    if (HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY) == HAL_OK) {
-        adc_value = HAL_ADC_GetValue(&hadc1);
+    adc_value = adc_sum / num_samples; // 平均値を計算
+    
+    // Calculate voltage values for display (mV単位で整数演算)
+    uint32_t dac_voltage_mv = (dac_value * 3300) / 4095;
+    uint32_t adc_voltage_mv = (adc_value * 3300) / 4095;
+    
+    // Output DAC and ADC values via UART
+    printf("DAC:%lu %lumV -> ADC:%lu %lumV\r\n", 
+           dac_value, dac_voltage_mv, adc_value, adc_voltage_mv);
+    
+    // Update LCD display every 10 iterations to reduce flicker
+    static uint32_t lcd_update_counter = 0;
+    lcd_update_counter++;
+    
+    if (lcd_update_counter % 10 == 0) { // LCDの更新頻度を下げる
+        LCD_AllClear();
         
-        // Calculate voltage values for display
-        float dac_voltage = (float)dac_value * 3.3f / 4095.0f;
-        float adc_voltage = (float)adc_value * 3.3f / 4095.0f;
+        // Display title
+        LCD_DrawString4bit(10, "DAC/ADC Monitor");
         
-        // Output DAC and ADC values via UART
-        printf("DAC: %lu (%.3fV) -> ADC: %lu (%.3fV)\r\n", 
-               dac_value, dac_voltage, adc_value, adc_voltage);
+        // Display DAC value and voltage (mV)
+        char dac_str[22];
+        snprintf(dac_str, sizeof(dac_str), "DAC:%04lu %lumV", dac_value, dac_voltage_mv);
+        LCD_DrawString4bit(30, dac_str);
         
-        // Update LCD display every few iterations to avoid flicker
-        static uint32_t lcd_update_counter = 0;
-        lcd_update_counter++;
+        // Display ADC value and voltage (mV)
+        char adc_str[22];
+        snprintf(adc_str, sizeof(adc_str), "ADC:%04lu %lumV", adc_value, adc_voltage_mv);
+        LCD_DrawString4bit(50, adc_str);
         
-        if (lcd_update_counter % 5 == 0) { // Update LCD every 5 iterations
-            LCD_AllClear(); // Clear the screen
-            
-            // Display title
-            LCD_DrawString4bit(10, "DAC/ADC Monitor");
-            
-            // Display DAC value and voltage
-            char dac_str[22];
-            snprintf(dac_str, sizeof(dac_str), "DAC: %04lu %.3fV", dac_value, dac_voltage);
-            LCD_DrawString4bit(30, dac_str);
-            
-            // Display ADC value and voltage
-            char adc_str[22];
-            snprintf(adc_str, sizeof(adc_str), "ADC: %04lu %.3fV", adc_value, adc_voltage);
-            LCD_DrawString4bit(50, adc_str);
-            
-            // Display direction indicator
-            const char* direction_str = dac_direction == 1 ? "Direction: UP  " : "Direction: DOWN";
-            LCD_DrawString4bit(70, direction_str);
-        }
+        // Display constant output indicator
+        LCD_DrawString4bit(70, "Output: CONSTANT");
     }
     
     HAL_ADC_Stop(&hadc1);
@@ -491,7 +501,7 @@ static void MX_ADC1_Init(void)
   */
   sConfig.Channel = ADC_CHANNEL_1;
   sConfig.Rank = ADC_REGULAR_RANK_1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
+  sConfig.SamplingTime = ADC_SAMPLETIME_246CYCLES_5; // より長いサンプリング時間に変更
   sConfig.OffsetNumber = ADC_OFFSET_NONE;
   sConfig.Offset = 0;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
