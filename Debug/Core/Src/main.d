@@ -39,9 +39,7 @@ Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/main.h \
  ../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal_uart_ex.h \
  ../Drivers/BSP/STM32U3xx_Nucleo/stm32u3xx_nucleo.h \
  ../Core/Inc/stm32u3xx_nucleo_conf.h \
- ../Drivers/BSP/STM32U3xx_Nucleo/stm32u3xx_nucleo_errno.h \
- ../Core/Inc/lcd.h ../Core/Inc/main.h ../Core/Inc/font8x8_basic.h \
- ../Core/Inc/Image.h
+ ../Drivers/BSP/STM32U3xx_Nucleo/stm32u3xx_nucleo_errno.h
 ../Core/Inc/main.h:
 ../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal.h:
 ../Core/Inc/stm32u3xx_hal_conf.h:
@@ -84,7 +82,3 @@ Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/main.h \
 ../Drivers/BSP/STM32U3xx_Nucleo/stm32u3xx_nucleo.h:
 ../Core/Inc/stm32u3xx_nucleo_conf.h:
 ../Drivers/BSP/STM32U3xx_Nucleo/stm32u3xx_nucleo_errno.h:
-../Core/Inc/lcd.h:
-../Core/Inc/main.h:
-../Core/Inc/font8x8_basic.h:
-../Core/Inc/Image.h:

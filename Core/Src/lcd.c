@@ -27,6 +27,9 @@ void LCD_Init(void)
     HAL_Delay(10);
 
     LCD_AllClear();                      /* メモリ全消去 (CMD 0x20) */
+    
+    /* 画面全体を白で塗りつぶし */
+    LCD_FillWhite();
 }
 
 void LCD_AllClear(void)
@@ -50,4 +53,19 @@ void LCD_SendLine4bit(uint16_t y, const uint8_t *buf)
     LCD_SELECT();             /* ★ CS = High (SCS=H がアクティブ) */
     lcd_tx(tx, sizeof tx);    /* SPI 8‑bit, ≒20 MHz, MSB first */
     LCD_UNSELECT();           /* CS = Low */
+}
+
+/* 画面全体を白で塗りつぶす */
+void LCD_FillWhite(void)
+{
+    uint8_t white_line[88];
+    /* 全ピクセルを白(0b1110)で初期化 */
+    for (int i = 0; i < 88; i++) {
+        white_line[i] = 0xEE;  /* 0b11101110 = 白白 */
+    }
+    
+    /* 全ライン(176行)を白で塗りつぶし */
+    for (uint16_t y = 0; y < 176; y++) {
+        LCD_SendLine4bit(y, white_line);
+    }
 }
