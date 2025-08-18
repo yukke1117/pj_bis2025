@@ -2,7 +2,7 @@
 #include "font8x8_basic.h"
 #include "main.h"
 #include <string.h>
-#include "image.h"
+#include "image_logo.h"
 
 #define PIX_ON   0b0000   /* 黒 → 文字色 */
 #define PIX_OFF  0b1110   /* RGB=111, D=0 → 白 → 背景色 */
@@ -114,17 +114,17 @@ void LCD_DrawImage(void)
 
     // The image data is 24bpp (3 bytes per pixel)
     const uint8_t bytes_per_pixel = 3; 
-    const uint16_t bytes_per_row = Image.width * bytes_per_pixel;
+    const uint16_t bytes_per_row = Image_logo.width * bytes_per_pixel;
 
-    for (uint16_t y = 0; y < Image.height; y++) {
+    for (uint16_t y = 0; y < Image_logo.height; y++) {
         // Clear the line buffer for the new line
         memset(rowbuf, 0, sizeof(rowbuf));
 
         // Get a pointer to the start of the current row in the source image
-        const uint8_t *p_src_row = &Image.data[y * bytes_per_row];
+        const uint8_t *p_src_row = &Image_logo.data[y * bytes_per_row];
 
         // Process each pixel in the row
-        for (uint16_t x = 0; x < Image.width; x++) {
+        for (uint16_t x = 0; x < Image_logo.width; x++) {
             // Get the R, G, B values for the current pixel
             const uint8_t *p_pixel = &p_src_row[x * bytes_per_pixel];
             uint8_t r = p_pixel[0];

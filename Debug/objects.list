@@ -1,5 +1,6 @@
 "./Core/Src/Image.o"
 "./Core/Src/font8x8_basic.o"
+"./Core/Src/image_logo.o"
 "./Core/Src/lcd.o"
 "./Core/Src/lcd_text.o"
 "./Core/Src/main.o"

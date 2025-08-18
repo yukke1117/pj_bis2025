@@ -215,7 +215,7 @@ int main(void)
   // 画像を表示
   LCD_DrawImage();
   HAL_Delay(3000);
-  LCD_FillWhite();
+  LCD_FillWhite(); // 一時的にコメントアウト
 
   // LCD初期表示
   LCD_DrawString4bit(10, "DAC/ADC Test");

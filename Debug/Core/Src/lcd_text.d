@@ -40,7 +40,7 @@ Core/Src/lcd_text.o: ../Core/Src/lcd_text.c ../Core/Inc/lcd.h \
  ../Drivers/BSP/STM32U3xx_Nucleo/stm32u3xx_nucleo.h \
  ../Core/Inc/stm32u3xx_nucleo_conf.h \
  ../Drivers/BSP/STM32U3xx_Nucleo/stm32u3xx_nucleo_errno.h \
- ../Core/Inc/font8x8_basic.h ../Core/Inc/main.h ../Core/Inc/image.h
+ ../Core/Inc/font8x8_basic.h ../Core/Inc/main.h ../Core/Inc/image_logo.h
 ../Core/Inc/lcd.h:
 ../Core/Inc/main.h:
 ../Drivers/STM32U3xx_HAL_Driver/Inc/stm32u3xx_hal.h:
@@ -86,4 +86,4 @@ Core/Src/lcd_text.o: ../Core/Src/lcd_text.c ../Core/Inc/lcd.h \
 ../Drivers/BSP/STM32U3xx_Nucleo/stm32u3xx_nucleo_errno.h:
 ../Core/Inc/font8x8_basic.h:
 ../Core/Inc/main.h:
-../Core/Inc/image.h:
+../Core/Inc/image_logo.h:
