@@ -1830,8 +1830,8 @@ int main(void)
   HAL_Delay(3000);
  800139e:	f640 30b8 	movw	r0, #3000	@ 0xbb8
  80013a2:	f001 fddf 	bl	8002f64 <HAL_Delay>
-  LCD_AllClear();
- 80013a6:	f7ff fe09 	bl	8000fbc <LCD_AllClear>
+  LCD_FillWhite();
+ 80013a6:	f7ff fe55 	bl	8001054 <LCD_FillWhite>
 
   // LCD初期表示
   LCD_DrawString4bit(10, "DAC/ADC Test");
@@ -2191,8 +2191,8 @@ int main(void)
  8001642:	1aca      	subs	r2, r1, r3
  8001644:	2a00      	cmp	r2, #0
  8001646:	d12b      	bne.n	80016a0 <main+0x34c>
-        LCD_AllClear();
- 8001648:	f7ff fcb8 	bl	8000fbc <LCD_AllClear>
+        LCD_FillWhite();
+ 8001648:	f7ff fd04 	bl	8001054 <LCD_FillWhite>
         
         // Display title
         LCD_DrawString4bit(10, "DAC/ADC Monitor");

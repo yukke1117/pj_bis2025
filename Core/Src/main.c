@@ -215,7 +215,7 @@ int main(void)
   // 画像を表示
   LCD_DrawImage();
   HAL_Delay(3000);
-  LCD_AllClear();
+  LCD_FillWhite();
 
   // LCD初期表示
   LCD_DrawString4bit(10, "DAC/ADC Test");
@@ -346,7 +346,7 @@ int main(void)
     lcd_update_counter++;
     
     if (lcd_update_counter % 10 == 0) { // LCDの更新頻度を下げる
-        LCD_AllClear();
+        LCD_FillWhite();
         
         // Display title
         LCD_DrawString4bit(10, "DAC/ADC Monitor");

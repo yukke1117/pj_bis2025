@@ -8719,7 +8719,7 @@ LOAD C:/ST/STM32CubeIDE_1.18.1/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.ext
  .debug_str     0x001416c3     0x3e01 ./Core/Src/font8x8_basic.o
  .debug_str     0x001416c3   0x137256 ./Core/Src/lcd.o
  .debug_str     0x001416c3   0x136c4f ./Core/Src/lcd_text.o
- .debug_str     0x001416c3   0x138d26 ./Core/Src/main.o
+ .debug_str     0x001416c3   0x138d27 ./Core/Src/main.o
  .debug_str     0x001416c3   0x13800d ./Core/Src/stm32u3xx_hal_msp.o
  .debug_str     0x001416c3   0x136b00 ./Core/Src/stm32u3xx_it.o
  .debug_str     0x001416c3     0x9a1a ./Core/Src/syscalls.o
