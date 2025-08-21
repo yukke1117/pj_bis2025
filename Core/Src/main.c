@@ -31,9 +31,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-// Current calculation constants
-#define CURRENT_OFFSET_MV 500
-#define CURRENT_DIVISOR 151000
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -340,18 +338,14 @@ int main(void)
     uint32_t adc_voltage_mv = (adc_value * 3300) / 4095;
     
     // Calculate current from ADC voltage (μA単位)
-    // I = (X/1000 - 0.5)/(151*1000) where X is in mV, I is in A
-    // I_uA = ((X - 500) * 1000000) / (151 * 1000 * 1000)
-    // I_uA = (X - 500) * 1000 / 151000
-    // 整数演算で精度を保つため、64bit中間計算を使用してオーバーフロー防止
-    int64_t temp = ((int64_t)adc_voltage_mv - CURRENT_OFFSET_MV) * 1000000;
-    int32_t current_nA = temp / CURRENT_DIVISOR; // nA単位で計算
-    int32_t current_uA = current_nA / 1000; // μA単位に変換
-    int32_t current_uA_decimal = (current_nA < 0 ? -current_nA : current_nA) % 1000 / 100; // 小数第1位
+    // I = (V_adc - 0.5V) / (151kΩ) where V_adc is in V, I is in A
+    // Convert to μA: I_uA = (V_adc_mV - 500) / 151000 * 1000000
+    float voltage_v = adc_voltage_mv / 1000.0f; // mV to V
+    float current_ua = (voltage_v - 0.5f) / 151.0f * 1000000.0f; // Calculate current in μA
     
     // Output DAC and ADC values via UART
-    printf("DAC:%lu %lumV -> ADC:%lu %lumV (%ld.%ld uA)\r\n", 
-           dac_value, dac_voltage_mv, adc_value, adc_voltage_mv, current_uA, current_uA_decimal);
+    printf("DAC:%lu %lumV -> ADC:%lu %lumV (%.1f uA)\r\n", 
+           dac_value, dac_voltage_mv, adc_value, adc_voltage_mv, current_ua);
     
     // Update LCD display every 10 iterations to reduce flicker
     static uint32_t lcd_update_counter = 0;
@@ -375,11 +369,7 @@ int main(void)
         
         // Display calculated current (μA)
         char current_str[32];
-        if (current_uA >= 0) {
-            snprintf(current_str, sizeof(current_str), "Current: %ld.%ld uA", current_uA, current_uA_decimal);
-        } else {
-            snprintf(current_str, sizeof(current_str), "Current: -%ld.%ld uA", current_uA < 0 ? -current_uA : current_uA, current_uA_decimal);
-        }
+        snprintf(current_str, sizeof(current_str), "Current: %.1f uA", current_ua);
         LCD_DrawString4bit(70, current_str);
         
         // Display status
