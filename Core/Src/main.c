@@ -31,7 +31,11 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+// Display and timing constants
+#define LCD_UPDATE_INTERVAL 10
+#define ADS_CHECK_INTERVAL 50
+#define VREF_MV 3300
+#define ADC_MAX_VALUE 4095
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -98,7 +102,7 @@ UART_HandleTypeDef huart5;
 
   // UARTデバッグ用 (MX_UART5_Init()で初期化されるもの)
   extern UART_HandleTypeDef huart5;
-  #define ADS_UART_HANDLE &huart5s
+  #define ADS_UART_HANDLE &huart5
 
   // コマンドとレジスタの定義
   // ADS1299のコマンド
@@ -264,10 +268,10 @@ int main(void)
   }
   printf("ADC Calibrated and Ready\r\n");
 
-  // Set initial DAC value
-  dac_value = 625; // Middle value (1.65V for 3.3V reference)
+  // Set initial DAC value to match the first voltage level (100mV)
+  dac_value = dac_voltage_levels[current_voltage_index];
   HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, dac_value);
-  printf("Initial DAC value set to: %lu (should be ~1.65V)\r\n", dac_value);
+  printf("Initial DAC value set to: %lu (%dmV)\r\n", dac_value, (current_voltage_index + 1) * 100);
 
   printf("Starting ID Register Read Test...\r\n");
 
@@ -339,8 +343,8 @@ int main(void)
     adc_value = adc_sum / num_samples; // 平均値を計算
     
     // Calculate voltage values for display (mV単位で整数演算)
-    uint32_t dac_voltage_mv = (dac_value * 3300) / 4095;
-    uint32_t adc_voltage_mv = (adc_value * 3300) / 4095;
+    uint32_t dac_voltage_mv = (dac_value * VREF_MV) / ADC_MAX_VALUE;
+    uint32_t adc_voltage_mv = (adc_value * VREF_MV) / ADC_MAX_VALUE;
     
     // Output DAC and ADC values via UART
     printf("DAC:%lu %lumV -> ADC:%lu %lumV\r\n", 
@@ -350,7 +354,7 @@ int main(void)
     static uint32_t lcd_update_counter = 0;
     lcd_update_counter++;
     
-    if (lcd_update_counter % 10 == 0) { // LCDの更新頻度を下げる
+    if (lcd_update_counter % LCD_UPDATE_INTERVAL == 0) { // LCDの更新頻度を下げる
         LCD_FillWhite();
         
         // Display title
@@ -371,20 +375,18 @@ int main(void)
         LCD_DrawString4bit(90, "to shift voltage");
     }
     
-    HAL_ADC_Stop(&hadc1);
-
     // Keep existing ADS1299 functionality (reduced frequency)
     static uint32_t ads_counter = 0;
     ads_counter++;
     
-    if (ads_counter % 50 == 0) { // Every 50th iteration (less frequent for better LCD performance)
+    if (ads_counter % ADS_CHECK_INTERVAL == 0) { // Every 50th iteration (less frequent for better LCD performance)
         uint8_t device_id = ads_read_reg(REG_ID);
         printf("ADS1299 ID: 0x%02X\r\n", device_id);
         
-        // Display ADS1299 info on LCD
+        // Display ADS1299 info on LCD (moved to line 110 to avoid overlap)
         char ads_str[22];
         snprintf(ads_str, sizeof(ads_str), "ADS ID: 0x%02X", device_id);
-        LCD_DrawString4bit(90, ads_str);
+        LCD_DrawString4bit(110, ads_str);
         
         // Check DRDY pin and read data if available
         if (HAL_GPIO_ReadPin(ADS_DRDY_PORT, ADS_DRDY_PIN) == GPIO_PIN_RESET) {
