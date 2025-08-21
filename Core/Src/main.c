@@ -212,8 +212,8 @@ int main(void)
   LCD_Init();
   printf("LCD Initialized\r\n");
 
-  // 画像を表示
-  LCD_DrawImage();
+  // 画像を表示（カラー版）
+  LCD_DrawImageColorful();
   HAL_Delay(3000);
   LCD_FillWhite(); // 一時的にコメントアウト
 

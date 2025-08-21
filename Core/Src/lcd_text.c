@@ -108,13 +108,61 @@ void LCD_BlinkText(uint16_t y0, const char *str, uint8_t visible)
     }
 }
 
+void LCD_DrawImageColorful(void)
+{
+    uint8_t rowbuf[88]; // 176px / 2 pixels_per_byte = 88 bytes
+    const uint16_t bytes_per_row = Image_logo.width; // 8bpp = 1 byte per pixel
+
+    for (uint16_t y = 0; y < Image_logo.height; y++) {
+        memset(rowbuf, 0, sizeof(rowbuf));
+        const uint8_t *p_src_row = &Image_logo.data[y * bytes_per_row];
+
+        for (uint16_t x = 0; x < Image_logo.width; x++) {
+            uint8_t mono_val = p_src_row[x];
+            uint8_t pix4;
+            
+            if (mono_val == 0x00) {
+                // Add position-based color variation to black areas
+                if ((x + y) % 20 < 5) {
+                    pix4 = 0b0001;  // Dark blue
+                } else if ((x + y) % 20 < 10) {
+                    pix4 = 0b0100;  // Green
+                } else if ((x + y) % 20 < 15) {
+                    pix4 = 0b1000;  // Red
+                } else {
+                    pix4 = 0b0000;  // Black
+                }
+            } else if (mono_val == 0xFF) {
+                // Add subtle color to white areas based on position
+                if (y < 60) {
+                    pix4 = 0b1101;  // Light yellow
+                } else if (y < 120) {
+                    pix4 = 0b1011;  // Light cyan
+                } else {
+                    pix4 = 0b1110;  // White
+                }
+            } else {
+                // Gradient areas
+                pix4 = 0b0110;  // Cyan for any intermediate values
+            }
+
+            uint16_t byte_idx = x / 2;
+            if (x & 1) {
+                rowbuf[byte_idx] |= pix4;
+            } else {
+                rowbuf[byte_idx] |= pix4 << 4;
+            }
+        }
+        LCD_SendLine4bit(y, rowbuf);
+    }
+}
+
 void LCD_DrawImage(void)
 {
     uint8_t rowbuf[88]; // 176px / 2 pixels_per_byte = 88 bytes
 
-    // The image data is 24bpp (3 bytes per pixel)
-    const uint8_t bytes_per_pixel = 3; 
-    const uint16_t bytes_per_row = Image_logo.width * bytes_per_pixel;
+    // The current image data is 8bpp monochrome (1 byte per pixel)
+    const uint16_t bytes_per_row = Image_logo.width; // 8bpp = 1 byte per pixel
 
     for (uint16_t y = 0; y < Image_logo.height; y++) {
         // Clear the line buffer for the new line
@@ -125,20 +173,28 @@ void LCD_DrawImage(void)
 
         // Process each pixel in the row
         for (uint16_t x = 0; x < Image_logo.width; x++) {
-            // Get the R, G, B values for the current pixel
-            const uint8_t *p_pixel = &p_src_row[x * bytes_per_pixel];
-            uint8_t r = p_pixel[0];
-            uint8_t g = p_pixel[1];
-            uint8_t b = p_pixel[2];
-
-            // Convert 24bpp pixel to monochrome 4bpp pixel
-            // Using a simple luminance threshold.
-            // (R+G+B)/3 > 127
+            // Get the monochrome value for the current pixel
+            uint8_t mono_val = p_src_row[x];
+            
+            // Convert 8bpp monochrome to enhanced 4bpp color
             uint8_t pix4;
-            if ((r + g + b) > 382) { // 127 * 3 = 381
-                pix4 = PIX_OFF; // White
+            if (mono_val == 0x00) {
+                // Pure black - use black
+                pix4 = 0b0000;  // Black
+            } else if (mono_val == 0xFF) {
+                // Pure white - use white  
+                pix4 = 0b1110;  // White
             } else {
-                pix4 = PIX_ON; // Black
+                // Gray levels - map to color gradient
+                if (mono_val < 0x40) {
+                    pix4 = 0b0001;  // Dark blue
+                } else if (mono_val < 0x80) {
+                    pix4 = 0b0010;  // Blue
+                } else if (mono_val < 0xC0) {
+                    pix4 = 0b0110;  // Cyan
+                } else {
+                    pix4 = 0b1100;  // Light gray
+                }
             }
 
             // Pack the 4bpp pixel into the row buffer
