@@ -337,9 +337,18 @@ int main(void)
     uint32_t dac_voltage_mv = (dac_value * 3300) / 4095;
     uint32_t adc_voltage_mv = (adc_value * 3300) / 4095;
     
+    // Calculate current from ADC voltage (μA単位)
+    // I = (X/1000 - 0.5)/(151*1000) where X is in mV, I is in A
+    // I_uA = ((X - 500) * 1000000) / (151 * 1000 * 1000)
+    // I_uA = (X - 500) * 1000 / 151000
+    // 整数演算で精度を保つため、分子を先に計算
+    int32_t current_nA = ((int32_t)adc_voltage_mv - 500) * 1000000 / 151000; // nA単位で計算
+    int32_t current_uA = current_nA / 1000; // μA単位に変換
+    int32_t current_uA_decimal = abs(current_nA % 1000) / 100; // 小数第1位
+    
     // Output DAC and ADC values via UART
-    printf("DAC:%lu %lumV -> ADC:%lu %lumV\r\n", 
-           dac_value, dac_voltage_mv, adc_value, adc_voltage_mv);
+    printf("DAC:%lu %lumV -> ADC:%lu %lumV (%ld.%ld uA)\r\n", 
+           dac_value, dac_voltage_mv, adc_value, adc_voltage_mv, current_uA, current_uA_decimal);
     
     // Update LCD display every 10 iterations to reduce flicker
     static uint32_t lcd_update_counter = 0;
@@ -349,20 +358,29 @@ int main(void)
         LCD_FillWhite();
         
         // Display title
-        LCD_DrawString4bit(10, "DAC/ADC Monitor");
+        LCD_DrawString4bit(10, "Current Monitor");
         
         // Display DAC value and voltage (mV)
         char dac_str[22];
-        snprintf(dac_str, sizeof(dac_str), "DAC:%04lu %lumV", dac_value, dac_voltage_mv);
+        snprintf(dac_str, sizeof(dac_str), "DAC: %lu mV", dac_voltage_mv);
         LCD_DrawString4bit(30, dac_str);
         
-        // Display ADC value and voltage (mV)
+        // Display ADC voltage (mV)
         char adc_str[22];
-        snprintf(adc_str, sizeof(adc_str), "ADC:%04lu %lumV", adc_value, adc_voltage_mv);
+        snprintf(adc_str, sizeof(adc_str), "ADC: %lu mV", adc_voltage_mv);
         LCD_DrawString4bit(50, adc_str);
         
-        // Display constant output indicator
-        LCD_DrawString4bit(70, "Output: CONSTANT");
+        // Display calculated current (μA)
+        char current_str[22];
+        if (current_uA >= 0) {
+            snprintf(current_str, sizeof(current_str), "Current: %ld.%ld uA", current_uA, current_uA_decimal);
+        } else {
+            snprintf(current_str, sizeof(current_str), "Current: -%ld.%ld uA", -current_uA, current_uA_decimal);
+        }
+        LCD_DrawString4bit(70, current_str);
+        
+        // Display status
+        LCD_DrawString4bit(90, "Status: RUNNING");
     }
     
     HAL_ADC_Stop(&hadc1);
