@@ -306,8 +306,7 @@ int main(void)
 
   /* USER CODE BEGIN BSP */
 
-  /* -- Sample board code to send message over COM1 port ---- */
-  printf("Welcome to STM32 world !\n\r");
+
 
   /* USER CODE END BSP */
 
@@ -319,8 +318,7 @@ int main(void)
     if (BspButtonState == BUTTON_PRESSED) {
         // Debug output with actual voltage calculation
         uint32_t actual_voltage_mv = (dac_value * VREF_MV) / ADC_MAX_VALUE;
-        printf("Button pressed! Switching to %lumV (index: %d, DAC: %lu)\r\n", 
-               actual_voltage_mv, current_voltage_index, dac_value);
+
         
         button_was_pressed = 1;  // Set flag for LCD update
         BspButtonState = BUTTON_RELEASED;  // Reset state
@@ -404,21 +402,21 @@ int main(void)
     
     if (ads_counter % ADS_CHECK_INTERVAL == 0) { // Every 50th iteration (less frequent for better LCD performance)
         uint8_t device_id = ads_read_reg(REG_ID);
-        printf("ADS1299 ID: 0x%02X\r\n", device_id);
+        // printf("ADS1299 ID: 0x%02X\r\n", device_id);
         
         // Display ADS1299 info on LCD (moved to line 110 to avoid overlap)
         char ads_str[22];
-        snprintf(ads_str, sizeof(ads_str), "ADS ID: 0x%02X", device_id);
+        // snprintf(ads_str, sizeof(ads_str), "ADS ID: 0x%02X", device_id);
         LCD_DrawString4bit(110, ads_str);
         
         // Check DRDY pin and read data if available
         if (HAL_GPIO_ReadPin(ADS_DRDY_PORT, ADS_DRDY_PIN) == GPIO_PIN_RESET) {
             int32_t ch1_val = ads_read_ch1_data();
-            printf("ADS CH1: %ld\r\n", ch1_val);
+            // printf("ADS CH1: %ld\r\n", ch1_val);
             
             // Display ADS1299 CH1 data on LCD
             char ch1_str[22];
-            snprintf(ch1_str, sizeof(ch1_str), "CH1: %ld", ch1_val);
+            // snprintf(ch1_str, sizeof(ch1_str), "CH1: %ld", ch1_val);
             LCD_DrawString4bit(110, ch1_str);
         }
     }
