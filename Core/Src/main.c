@@ -75,16 +75,22 @@ UART_HandleTypeDef huart5;
   // DAC and ADC test variables
   // DAC電圧値の配列 (100mV, 200mV, 300mV, 400mV, 500mV)
   // 計算式: DAC_value = (voltage_mV * 4095) / 3300
+  // 正確な計算値:
+  // 100mV: (100 * 4095) / 3300 = 124.09 → 124
+  // 200mV: (200 * 4095) / 3300 = 248.18 → 248
+  // 300mV: (300 * 4095) / 3300 = 372.27 → 372
+  // 400mV: (400 * 4095) / 3300 = 496.36 → 496
+  // 500mV: (500 * 4095) / 3300 = 620.45 → 620
   const uint32_t dac_voltage_levels[] = {
-      124,  // 100mV
-      248,  // 200mV
-      372,  // 300mV
-      496,  // 400mV
-      620   // 500mV
+      124,  // 100mV (実際: 99.9mV)
+      248,  // 200mV (実際: 199.9mV)
+      372,  // 300mV (実際: 299.9mV)
+      496,  // 400mV (実際: 399.9mV)
+      620   // 500mV (実際: 499.9mV)
   };
   const uint8_t num_voltage_levels = sizeof(dac_voltage_levels) / sizeof(dac_voltage_levels[0]);
-  uint8_t current_voltage_index = 0;  // 現在の電圧インデックス
-  uint32_t dac_value = 124;  // 初期値は100mV
+  volatile uint8_t current_voltage_index = 0;  // 現在の電圧インデックス（割り込みで変更されるためvolatile）
+  volatile uint32_t dac_value = 124;  // 初期値は100mV（割り込みで変更されるためvolatile）
   static uint32_t adc_value = 0;
   static volatile uint8_t button_was_pressed = 0;  // ボタン押下検出フラグ
 
@@ -312,9 +318,10 @@ int main(void)
   {
     // Check if button was pressed in interrupt
     if (BspButtonState == BUTTON_PRESSED) {
-        // Debug output
-        printf("Button pressed! Switching to %dmV (index: %d, DAC: %lu)\r\n", 
-               ((current_voltage_index % 5) + 1) * 100, current_voltage_index, dac_value);
+        // Debug output with actual voltage calculation
+        uint32_t actual_voltage_mv = (dac_value * VREF_MV) / ADC_MAX_VALUE;
+        printf("Button pressed! Switching to %lumV (index: %d, DAC: %lu)\r\n", 
+               actual_voltage_mv, current_voltage_index, dac_value);
         
         button_was_pressed = 1;  // Set flag for LCD update
         BspButtonState = BUTTON_RELEASED;  // Reset state
@@ -1105,9 +1112,9 @@ void BSP_PB_Callback(Button_TypeDef Button)
   if (Button == BUTTON_USER)
   {
     // 直接割り込みハンドラ内で電圧レベルを切り替える
-    extern uint8_t current_voltage_index;
+    extern volatile uint8_t current_voltage_index;
     extern const uint32_t dac_voltage_levels[];
-    extern uint32_t dac_value;
+    extern volatile uint32_t dac_value;
     extern const uint8_t num_voltage_levels;
     
     // Move to the next voltage level
