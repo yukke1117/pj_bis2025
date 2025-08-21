@@ -358,9 +358,15 @@ int main(void)
     float voltage_v = adc_voltage_mv / 1000.0f; // mV to V
     float current_ua = (voltage_v - 0.5f) / 151000.0f * 1000000.0f; // Calculate current in μA
     
-    // Output DAC and ADC values via UART
-    printf("DAC:%lu %lumV -> ADC:%lu %lumV (%.1f uA)\r\n", 
-           dac_value, dac_voltage_mv, adc_value, adc_voltage_mv, current_ua);
+    // Output DAC voltage and ADC current via UART (only these 2 values)
+    char voltage_str[20];
+    char current_str[20];
+    char uart_output[50];
+    
+    snprintf(voltage_str, sizeof(voltage_str), "%.3f", dac_voltage_mv / 1000.0f); // DAC voltage in V
+    snprintf(current_str, sizeof(current_str), "%.1f", current_ua); // ADC current in uA
+    sprintf(uart_output, "%s,%s \r\n", voltage_str, current_str);
+    printf(uart_output);
     
     // Update LCD display every 10 iterations to reduce flicker
     static uint32_t lcd_update_counter = 0;
