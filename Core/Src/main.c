@@ -121,14 +121,34 @@ int main(void)
   /* 4) 画面をクリア */
   LCD_AllClear();
 
-  /* 5) 固定文字列を描画 */
-  for (uint16_t offset = 0; offset < 176 + strlen("HELLO WORLD") * 8; offset++) {
-      LCD_ScrollText(16, "HELLO WORLD", -offset);
-      HAL_Delay(20); // 20ms待つ（速度調整）
-  }
+  /* 5) カラー表示のデモ */
+  // カラーテスト - 画面全体を異なる色で塗りつぶし
+  LCD_FillColor(COLOR_RED);
+  HAL_Delay(1000);
+  LCD_FillColor(COLOR_GREEN);  
+  HAL_Delay(1000);
+  LCD_FillColor(COLOR_BLUE);
+  HAL_Delay(1000);
+  LCD_FillColor(COLOR_WHITE);
+  HAL_Delay(1000);
+  
+  // カラー画像の表示
+  LCD_FillColor(COLOR_BLACK); // 背景を黒に
+  LCD_DrawImageColor(72, 72, 32, 32, test_color_image_32x32); // 中央に32x32の画像を表示
+  HAL_Delay(2000);
+  
+  // カラーテキストの表示
+  LCD_FillColor(COLOR_BLACK);
+  LCD_DrawStringColor(20, "COLOR TEST", COLOR_RED);
+  LCD_DrawStringColor(40, "RED GREEN", COLOR_GREEN);
+  LCD_DrawStringColor(60, "BLUE TEXT", COLOR_BLUE);
+  LCD_DrawStringColor(80, "WHITE ON BLACK", COLOR_WHITE);
+  
   const char *msg = "BOUNCE!";
   int y = 0;
   int dy = 5; // 移動量
+  uint8_t color_index = 0;
+  const uint8_t colors[] = {COLOR_RED, COLOR_GREEN, COLOR_BLUE, COLOR_YELLOW, COLOR_MAGENTA, COLOR_CYAN, COLOR_WHITE};
 
 
   /* USER CODE END 2 */
@@ -158,14 +178,16 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+      // カラーバウンスアニメーション
+      LCD_FillColor(COLOR_BLACK);
+      LCD_DrawStringColor(y, msg, colors[color_index]);
+      HAL_Delay(30); // 30ms待つ
 
-	  LCD_BounceText(msg, y);
-	      HAL_Delay(30); // 30ms待つ
-
-	      y += dy;
-	      if (y <= 0 || y >= (176 - 8)) { // 画面端で反転（8は文字高さ）
-	          dy = -dy;
-	      }
+      y += dy;
+      if (y <= 0 || y >= (176 - 8)) { // 画面端で反転（8は文字高さ）
+          dy = -dy;
+          color_index = (color_index + 1) % 7; // 色を変更
+      }
 
     /* USER CODE END WHILE */
 
