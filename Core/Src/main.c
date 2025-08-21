@@ -386,10 +386,6 @@ int main(void)
         char current_str[32];
         snprintf(current_str, sizeof(current_str), "Current: %.1f uA", current_ua);
         LCD_DrawString4bit(70, current_str);
-        
-        // Display button instruction
-        LCD_DrawString4bit(70, "Press USER button");
-        LCD_DrawString4bit(90, "to shift voltage");
     }
     
     // Keep existing ADS1299 functionality (reduced frequency)
