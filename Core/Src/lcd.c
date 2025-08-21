@@ -9,6 +9,7 @@ extern SPI_HandleTypeDef hspi1;          /* CubeMX が生成したハンドル *
 #define LCD_DISP_GPIO_Port GPIOC
 #define LCD_DISP_Pin       GPIO_PIN_10
 #define HDR4BIT   0x24
+#define HDR8BIT   0x20   /* 8-bit color mode header */
 
 /* 内部ヘルパ */
 static inline void LCD_SELECT  (void){ HAL_GPIO_WritePin(LCD_CS_GPIO_Port,  LCD_CS_Pin, GPIO_PIN_SET); }

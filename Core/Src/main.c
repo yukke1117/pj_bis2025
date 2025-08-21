@@ -236,7 +236,35 @@ int main(void)
   // 画像を表示
   LCD_DrawImage();
   HAL_Delay(3000);
-  LCD_FillWhite(); // 一時的にコメントアウト
+  
+  // カラーデモ - 色の切り替えテスト
+  printf("Starting color demo...\r\n");
+  LCD_FillColor(COLOR_RED);
+  HAL_Delay(1000);
+  LCD_FillColor(COLOR_GREEN);  
+  HAL_Delay(1000);
+  LCD_FillColor(COLOR_BLUE);
+  HAL_Delay(1000);
+  LCD_FillColor(COLOR_YELLOW);
+  HAL_Delay(1000);
+  LCD_FillColor(COLOR_WHITE);
+  HAL_Delay(1000);
+  
+  // カラーテキストテスト
+  LCD_FillColor(COLOR_BLACK);
+  LCD_DrawStringColor(20, "COLOR TEST", COLOR_RED);
+  LCD_DrawStringColor(40, "GREEN TEXT", COLOR_GREEN);
+  LCD_DrawStringColor(60, "BLUE TEXT", COLOR_BLUE);
+  LCD_DrawStringColor(80, "YELLOW", COLOR_YELLOW);
+  HAL_Delay(3000);
+  
+  // カラー画像テスト
+  LCD_FillColor(COLOR_BLACK);
+  LCD_DrawImageColor(72, 72, 32, 32, test_color_image_32x32);
+  HAL_Delay(3000);
+  
+  printf("Color demo complete, starting normal LCD mode...\r\n");
+  LCD_FillWhite();
 
   // LCD初期表示
   LCD_DrawString4bit(10, "DAC/ADC Test");
