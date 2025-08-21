@@ -69,7 +69,7 @@ UART_HandleTypeDef huart5;
   static char uart_buf[100];
 
   // DAC and ADC test variables
-  static uint32_t dac_value = 625;  // 固定値（約0.5V）
+  static uint32_t dac_value = 620;  // 固定値（500 mV）
   static uint32_t adc_value = 0;
   // static uint8_t dac_direction = 1; // 1 for increasing, 0 for decreasing (不要なのでコメントアウト)
 
@@ -254,9 +254,9 @@ int main(void)
   printf("ADC Calibrated and Ready\r\n");
 
   // Set initial DAC value
-  dac_value = 625; // Middle value (1.65V for 3.3V reference)
+  dac_value = 620; // 500 mV for 3.3V reference
   HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, dac_value);
-  printf("Initial DAC value set to: %lu (should be ~1.65V)\r\n", dac_value);
+  printf("Initial DAC value set to: %lu (should be 500 mV)\r\n", dac_value);
 
   printf("Starting ID Register Read Test...\r\n");
 
