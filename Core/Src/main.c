@@ -339,9 +339,9 @@ int main(void)
     
     // Calculate current from ADC voltage (μA単位)
     // I = (V_adc - 0.5V) / (151kΩ) where V_adc is in V, I is in A
-    // Convert to μA: I_uA = (V_adc_mV - 500) / 151000 * 1000000
+    // Convert to μA: I_uA = (V_adc - 0.5V) / 151000Ω * 1000000
     float voltage_v = adc_voltage_mv / 1000.0f; // mV to V
-    float current_ua = (voltage_v - 0.5f) / 151.0f * 1000000.0f; // Calculate current in μA
+    float current_ua = (voltage_v - 0.5f) / 151000.0f * 1000000.0f; // Calculate current in μA
     
     // Output DAC and ADC values via UART
     printf("DAC:%lu %lumV -> ADC:%lu %lumV (%.1f uA)\r\n", 
