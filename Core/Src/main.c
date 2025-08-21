@@ -69,9 +69,20 @@ UART_HandleTypeDef huart5;
   static char uart_buf[100];
 
   // DAC and ADC test variables
-  static uint32_t dac_value = 625;  // 固定値（約0.5V）
+  // DAC電圧値の配列 (100mV, 200mV, 300mV, 400mV, 500mV)
+  // 計算式: DAC_value = (voltage_mV * 4095) / 3300
+  static const uint32_t dac_voltage_levels[] = {
+      124,  // 100mV
+      248,  // 200mV
+      372,  // 300mV
+      496,  // 400mV
+      620   // 500mV
+  };
+  static const uint8_t num_voltage_levels = sizeof(dac_voltage_levels) / sizeof(dac_voltage_levels[0]);
+  static uint8_t current_voltage_index = 0;  // 現在の電圧インデックス
+  static uint32_t dac_value = 124;  // 初期値は100mV
   static uint32_t adc_value = 0;
-  // static uint8_t dac_direction = 1; // 1 for increasing, 0 for decreasing (不要なのでコメントアウト)
+  static uint8_t button_handled = 0;  // ボタン処理フラグ
 
   // ADS1299のSPIハンドル (MX_SPI2_Init()で初期化されるもの)
   extern SPI_HandleTypeDef hspi2;
@@ -295,21 +306,24 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    // DAC/ADC Test Loop with LCD Display
-    // Generate a slowly changing DAC output (triangle wave)
-    /*
-    if (dac_direction == 1) {
-        dac_value += 50; // Increase DAC value
-        if (dac_value >= 4095) {
-            dac_direction = 0; // Change direction at max
-        }
-    } else {
-        dac_value -= 50; // Decrease DAC value
-        if (dac_value <= 0) {
-            dac_direction = 1; // Change direction at min
-        }
+    // Check if USER button was pressed
+    if (BspButtonState == BUTTON_PRESSED && !button_handled) {
+        // Move to the next voltage level
+        current_voltage_index = (current_voltage_index + 1) % num_voltage_levels;
+        dac_value = dac_voltage_levels[current_voltage_index];
+        
+        // Debug output
+        printf("Button pressed! Switching to %dmV (index: %d, DAC: %lu)\r\n", 
+               (current_voltage_index + 1) * 100, current_voltage_index, dac_value);
+        
+        button_handled = 1;  // Prevent multiple triggers
     }
-    */
+    
+    // Reset button handling when button is released
+    if (BspButtonState == BUTTON_RELEASED && button_handled) {
+        button_handled = 0;
+        BspButtonState = BUTTON_RELEASED;  // Reset state
+    }
     
     // Set new DAC value
     HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, dac_value);
@@ -349,20 +363,21 @@ int main(void)
         LCD_FillWhite();
         
         // Display title
-        LCD_DrawString4bit(10, "DAC/ADC Monitor");
+        LCD_DrawString4bit(10, "DAC Voltage Shifter");
         
         // Display DAC value and voltage (mV)
-        char dac_str[22];
-        snprintf(dac_str, sizeof(dac_str), "DAC:%04lu %lumV", dac_value, dac_voltage_mv);
+        char dac_str[32];
+        snprintf(dac_str, sizeof(dac_str), "DAC: %lumV [%d/5]", dac_voltage_mv, current_voltage_index + 1);
         LCD_DrawString4bit(30, dac_str);
         
         // Display ADC value and voltage (mV)
-        char adc_str[22];
-        snprintf(adc_str, sizeof(adc_str), "ADC:%04lu %lumV", adc_value, adc_voltage_mv);
+        char adc_str[32];
+        snprintf(adc_str, sizeof(adc_str), "ADC: %lumV", adc_voltage_mv);
         LCD_DrawString4bit(50, adc_str);
         
-        // Display constant output indicator
-        LCD_DrawString4bit(70, "Output: CONSTANT");
+        // Display button instruction
+        LCD_DrawString4bit(70, "Press USER button");
+        LCD_DrawString4bit(90, "to shift voltage");
     }
     
     HAL_ADC_Stop(&hadc1);
