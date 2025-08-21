@@ -71,18 +71,18 @@ UART_HandleTypeDef huart5;
   // DAC and ADC test variables
   // DAC電圧値の配列 (100mV, 200mV, 300mV, 400mV, 500mV)
   // 計算式: DAC_value = (voltage_mV * 4095) / 3300
-  static const uint32_t dac_voltage_levels[] = {
+  const uint32_t dac_voltage_levels[] = {
       124,  // 100mV
       248,  // 200mV
       372,  // 300mV
       496,  // 400mV
       620   // 500mV
   };
-  static const uint8_t num_voltage_levels = sizeof(dac_voltage_levels) / sizeof(dac_voltage_levels[0]);
-  static uint8_t current_voltage_index = 0;  // 現在の電圧インデックス
-  static uint32_t dac_value = 124;  // 初期値は100mV
+  const uint8_t num_voltage_levels = sizeof(dac_voltage_levels) / sizeof(dac_voltage_levels[0]);
+  uint8_t current_voltage_index = 0;  // 現在の電圧インデックス
+  uint32_t dac_value = 124;  // 初期値は100mV
   static uint32_t adc_value = 0;
-  static uint8_t button_handled = 0;  // ボタン処理フラグ
+  static volatile uint8_t button_was_pressed = 0;  // ボタン押下検出フラグ
 
   // ADS1299のSPIハンドル (MX_SPI2_Init()で初期化されるもの)
   extern SPI_HandleTypeDef hspi2;
@@ -306,22 +306,13 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    // Check if USER button was pressed
-    if (BspButtonState == BUTTON_PRESSED && !button_handled) {
-        // Move to the next voltage level
-        current_voltage_index = (current_voltage_index + 1) % num_voltage_levels;
-        dac_value = dac_voltage_levels[current_voltage_index];
-        
+    // Check if button was pressed in interrupt
+    if (BspButtonState == BUTTON_PRESSED) {
         // Debug output
         printf("Button pressed! Switching to %dmV (index: %d, DAC: %lu)\r\n", 
-               (current_voltage_index + 1) * 100, current_voltage_index, dac_value);
+               ((current_voltage_index % 5) + 1) * 100, current_voltage_index, dac_value);
         
-        button_handled = 1;  // Prevent multiple triggers
-    }
-    
-    // Reset button handling when button is released
-    if (BspButtonState == BUTTON_RELEASED && button_handled) {
-        button_handled = 0;
+        button_was_pressed = 1;  // Set flag for LCD update
         BspButtonState = BUTTON_RELEASED;  // Reset state
     }
     
@@ -1111,6 +1102,16 @@ void BSP_PB_Callback(Button_TypeDef Button)
 {
   if (Button == BUTTON_USER)
   {
+    // 直接割り込みハンドラ内で電圧レベルを切り替える
+    extern uint8_t current_voltage_index;
+    extern const uint32_t dac_voltage_levels[];
+    extern uint32_t dac_value;
+    extern const uint8_t num_voltage_levels;
+    
+    // Move to the next voltage level
+    current_voltage_index = (current_voltage_index + 1) % num_voltage_levels;
+    dac_value = dac_voltage_levels[current_voltage_index];
+    
     BspButtonState = BUTTON_PRESSED;
   }
 }
