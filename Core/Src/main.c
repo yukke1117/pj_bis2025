@@ -34,6 +34,8 @@
 // Display and timing constants
 #define LCD_UPDATE_INTERVAL 10
 #define ADS_CHECK_INTERVAL 50
+#define UART_TRANSMISSION_INTERVAL_MS 1000  // UART transmission interval in milliseconds
+#define MAX_SAMPLES_PER_INTERVAL 100  // Maximum samples to prevent overflow
 #define VREF_MV 3300
 #define ADC_MAX_VALUE 4095
 /* USER CODE END PD */
@@ -74,9 +76,10 @@ UART_HandleTypeDef huart5;
   
   // Variables for UART timing and averaging
   static uint32_t last_uart_time = 0;  // Last UART transmission time
-  static uint32_t adc_sum_for_uart = 0;  // Sum for averaging
   static uint32_t adc_count_for_uart = 0;  // Sample count
   static float current_sum_for_uart = 0.0f;  // Current sum for averaging
+  // Static buffer for UART output to reduce stack usage
+  static char uart_output[50];
 
   // DAC and ADC test variables
   // DAC電圧値の配列 (100mV, 200mV, 300mV, 400mV, 500mV)
@@ -362,25 +365,24 @@ int main(void)
     float voltage_v = adc_voltage_mv / 1000.0f; // mV to V
     float current_ua = (voltage_v - 0.5f) / 151000.0f * 1000000.0f; // Calculate current in μA
     
-    // Accumulate values for UART averaging
-    adc_sum_for_uart += adc_voltage_mv;
-    current_sum_for_uart += current_ua;
-    adc_count_for_uart++;
+    // Accumulate values for UART averaging (with overflow protection)
+    if (adc_count_for_uart < MAX_SAMPLES_PER_INTERVAL) {
+        current_sum_for_uart += current_ua;
+        adc_count_for_uart++;
+    }
     
-    // Send UART message every 1 second (1000ms)
+    // Send UART message every 1 second
     uint32_t current_time = HAL_GetTick();
-    if (current_time - last_uart_time >= 1000) {  // 1 second interval
+    if (current_time - last_uart_time >= UART_TRANSMISSION_INTERVAL_MS) {
         if (adc_count_for_uart > 0) {
             // Calculate average values
             float avg_current_ua = current_sum_for_uart / adc_count_for_uart;
             
             // Format and send UART message (same format as LCD display)
-            char uart_output[50];
             snprintf(uart_output, sizeof(uart_output), "Current: %.1f uA\r\n", avg_current_ua);
             printf(uart_output);
             
             // Reset accumulation variables
-            adc_sum_for_uart = 0;
             current_sum_for_uart = 0.0f;
             adc_count_for_uart = 0;
         }
