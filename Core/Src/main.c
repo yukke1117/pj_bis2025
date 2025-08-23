@@ -71,6 +71,12 @@ UART_HandleTypeDef huart5;
   
   // UART buffer for ADS1299 debug output
   static char uart_buf[100];
+  
+  // Variables for UART timing and averaging
+  static uint32_t last_uart_time = 0;  // Last UART transmission time
+  static uint32_t adc_sum_for_uart = 0;  // Sum for averaging
+  static uint32_t adc_count_for_uart = 0;  // Sample count
+  static float current_sum_for_uart = 0.0f;  // Current sum for averaging
 
   // DAC and ADC test variables
   // DAC電圧値の配列 (100mV, 200mV, 300mV, 400mV, 500mV)
@@ -356,15 +362,30 @@ int main(void)
     float voltage_v = adc_voltage_mv / 1000.0f; // mV to V
     float current_ua = (voltage_v - 0.5f) / 151000.0f * 1000000.0f; // Calculate current in μA
     
-    // Output DAC voltage and ADC current via UART (only these 2 values)
-    char voltage_str[20];
-    char current_str[20];
-    char uart_output[50];
+    // Accumulate values for UART averaging
+    adc_sum_for_uart += adc_voltage_mv;
+    current_sum_for_uart += current_ua;
+    adc_count_for_uart++;
     
-    snprintf(voltage_str, sizeof(voltage_str), "%.3f", dac_voltage_mv / 1000.0f); // DAC voltage in V
-    snprintf(current_str, sizeof(current_str), "%.1f", current_ua); // ADC current in uA
-    sprintf(uart_output, "%s,%s \r\n", voltage_str, current_str);
-    printf(uart_output);
+    // Send UART message every 1 second (1000ms)
+    uint32_t current_time = HAL_GetTick();
+    if (current_time - last_uart_time >= 1000) {  // 1 second interval
+        if (adc_count_for_uart > 0) {
+            // Calculate average values
+            float avg_current_ua = current_sum_for_uart / adc_count_for_uart;
+            
+            // Format and send UART message (same format as LCD display)
+            char uart_output[50];
+            snprintf(uart_output, sizeof(uart_output), "Current: %.1f uA\r\n", avg_current_ua);
+            printf(uart_output);
+            
+            // Reset accumulation variables
+            adc_sum_for_uart = 0;
+            current_sum_for_uart = 0.0f;
+            adc_count_for_uart = 0;
+        }
+        last_uart_time = current_time;
+    }
     
     // Update LCD display every 10 iterations to reduce flicker
     static uint32_t lcd_update_counter = 0;
