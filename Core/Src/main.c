@@ -373,19 +373,30 @@ int main(void)
     
     // Send UART message every 1 second
     uint32_t current_time = HAL_GetTick();
-    if (current_time - last_uart_time >= UART_TRANSMISSION_INTERVAL_MS) {
+    // Handle tick overflow (wraps around after ~49 days)
+    if ((current_time >= last_uart_time && (current_time - last_uart_time) >= UART_TRANSMISSION_INTERVAL_MS) ||
+        (current_time < last_uart_time && (current_time + (0xFFFFFFFF - last_uart_time)) >= UART_TRANSMISSION_INTERVAL_MS)) {
         if (adc_count_for_uart > 0) {
             // Calculate average values
             float avg_current_ua = current_sum_for_uart / adc_count_for_uart;
             
-            // Format and send UART message (same format as LCD display)
-            snprintf(uart_output, sizeof(uart_output), "Current: %.1f uA\r\n", avg_current_ua);
+            // Format and send UART message: voltage(V) , current(uA)
+            float dac_voltage_v = dac_voltage_mv / 1000.0f;  // Convert mV to V
+            snprintf(uart_output, sizeof(uart_output), "%.3f , %.1f\r\n", dac_voltage_v, avg_current_ua);
             printf(uart_output);
             
-            // Reset accumulation variables
-            current_sum_for_uart = 0.0f;
-            adc_count_for_uart = 0;
+            // Debug: show sample count
+            // printf("Debug: %lu samples averaged\r\n", adc_count_for_uart);
+        } else {
+            // If no samples, still send a message with current value
+            float dac_voltage_v = dac_voltage_mv / 1000.0f;
+            snprintf(uart_output, sizeof(uart_output), "%.3f , %.1f\r\n", dac_voltage_v, current_ua);
+            printf(uart_output);
         }
+        
+        // Reset accumulation variables
+        current_sum_for_uart = 0.0f;
+        adc_count_for_uart = 0;
         last_uart_time = current_time;
     }
     
