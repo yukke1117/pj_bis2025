@@ -1,5 +1,0 @@
-../Core/Src/lcd_text.c:11:6:LCD_DrawString4bit	6
-../Core/Src/lcd_text.c:44:6:LCD_ScrollText	9
-../Core/Src/lcd_text.c:84:6:LCD_BounceText	1
-../Core/Src/lcd_text.c:94:6:LCD_BlinkText	4
-../Core/Src/lcd_text.c:111:6:LCD_DrawImage	5

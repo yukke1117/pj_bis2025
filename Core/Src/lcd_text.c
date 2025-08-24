@@ -110,48 +110,35 @@ void LCD_BlinkText(uint16_t y0, const char *str, uint8_t visible)
 
 void LCD_DrawImage(void)
 {
-    uint8_t rowbuf[88]; // 176px / 2 pixels_per_byte = 88 bytes
+    uint8_t rowbuf[88]; // 176px / 2 = 88bytes
 
-    // The image data is 24bpp (3 bytes per pixel)
-    const uint8_t bytes_per_pixel = 3; 
-    const uint16_t bytes_per_row = Image_logo.width * bytes_per_pixel;
+    const uint8_t bytes_per_pixel = 3;
+    const uint16_t bytes_per_row = Image.width * bytes_per_pixel;
 
-    for (uint16_t y = 0; y < Image_logo.height; y++) {
-        // Clear the line buffer for the new line
+    for (uint16_t y = 0; y < Image.height; y++) {
         memset(rowbuf, 0, sizeof(rowbuf));
+        const uint8_t *p_src_row = &Image.data[y * bytes_per_row];
 
-        // Get a pointer to the start of the current row in the source image
-        const uint8_t *p_src_row = &Image_logo.data[y * bytes_per_row];
-
-        // Process each pixel in the row
-        for (uint16_t x = 0; x < Image_logo.width; x++) {
-            // Get the R, G, B values for the current pixel
+        for (uint16_t x = 0; x < Image.width; x++) {
             const uint8_t *p_pixel = &p_src_row[x * bytes_per_pixel];
-            uint8_t r = p_pixel[0];
-            uint8_t g = p_pixel[1];
-            uint8_t b = p_pixel[2];
+            uint8_t r_bit = (p_pixel[0] > 127) ? 1 : 0;
+            uint8_t g_bit = (p_pixel[1] > 127) ? 1 : 0;
+            uint8_t b_bit = (p_pixel[2] > 127) ? 1 : 0;
 
-            // Convert 24bpp pixel to monochrome 4bpp pixel
-            // Using a simple luminance threshold.
-            // (R+G+B)/3 > 127
-            uint8_t pix4;
-            if ((r + g + b) > 382) { // 127 * 3 = 381
-                pix4 = PIX_OFF; // White
-            } else {
-                pix4 = PIX_ON; // Black
-            }
+            // RGB + Dummy → 4bitパック
+            uint8_t pix4 = (r_bit << 3) | (g_bit << 2) | (b_bit << 1) | 0;
 
-            // Pack the 4bpp pixel into the row buffer
-            // 2 pixels per byte: even x in high nibble, odd x in low nibble
+            // 偶数xは上位Nibble, 奇数xは下位Nibble
             uint16_t byte_idx = x / 2;
-            if (x & 1) { // odd pixel
-                rowbuf[byte_idx] |= pix4; // low nibble
-            } else { // even pixel
-                rowbuf[byte_idx] |= pix4 << 4; // high nibble
+            if (x & 1) {
+                rowbuf[byte_idx] |= pix4 & 0x0F;
+            } else {
+                rowbuf[byte_idx] |= (pix4 << 4) & 0xF0;
             }
         }
 
-        // Send the packed line to the LCD
         LCD_SendLine4bit(y, rowbuf);
     }
 }
+
+
