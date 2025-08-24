@@ -101,6 +101,7 @@ UART_HandleTypeDef huart5;
   volatile uint8_t current_voltage_index = 0;  // 現在の電圧インデックス（割り込みで変更されるためvolatile）
   volatile uint32_t dac_value = 124;  // 初期値は100mV（割り込みで変更されるためvolatile）
   static uint32_t adc_value = 0;
+  static uint32_t adc2_value = 0;  // ADC2の測定値
   static volatile uint8_t button_was_pressed = 0;  // ボタン押下検出フラグ
   static uint32_t last_button_time = 0;  // デバウンス用のタイムスタンプ
   volatile uint8_t button_request_change = 0;  // 割り込みからのボタン変更要求フラグ
@@ -277,13 +278,21 @@ int main(void)
   }
   printf("OPAMP2 Started\r\n");
   
-  // Calibrate ADC
+  // Calibrate ADC1
   if (HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED) != HAL_OK) {
-      printf("ADC Calibration Error!\r\n");
-      LCD_DrawString4bit(90, "ADC Error");
+      printf("ADC1 Calibration Error!\r\n");
+      LCD_DrawString4bit(90, "ADC1 Error");
       Error_Handler();
   }
-  printf("ADC Calibrated and Ready\r\n");
+  printf("ADC1 Calibrated and Ready\r\n");
+  
+  // Calibrate ADC2
+  if (HAL_ADCEx_Calibration_Start(&hadc2, ADC_SINGLE_ENDED) != HAL_OK) {
+      printf("ADC2 Calibration Error!\r\n");
+      LCD_DrawString4bit(110, "ADC2 Error");
+      Error_Handler();
+  }
+  printf("ADC2 Calibrated and Ready\r\n");
   // Set initial DAC value to match the first voltage level (100mV)
   dac_value = dac_voltage_levels[current_voltage_index];
   HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, dac_value);
@@ -404,16 +413,42 @@ int main(void)
             }
         }
     }
+    adc_value = adc_sum / num_samples; // 平均値を計算
+    
+    // Read ADC2 value (OPAMP2 via voltage follower) - 複数回測定して平均化
+    uint32_t adc2_sum = 0;
+    const uint8_t num_samples2 = 10; // 10回測定して平均
+    
+    for (uint8_t i = 0; i < num_samples2; i++) {
+        if (HAL_ADC_Start(&hadc2) != HAL_OK) {
+            printf("ADC2 Start Error!\r\n");
+            break;
+        }
+        
+        if (HAL_ADC_PollForConversion(&hadc2, HAL_MAX_DELAY) == HAL_OK) {
+            adc2_sum += HAL_ADC_GetValue(&hadc2);
+        }
+        HAL_ADC_Stop(&hadc2);
+        HAL_Delay(1); // 測定間の短い遅延
+    }
+    
+    adc2_value = adc2_sum / num_samples2; // 平均値を計算
     
     // Calculate voltage values for display (mV単位で整数演算)
     uint32_t dac_voltage_mv = (dac_value * VREF_MV) / ADC_MAX_VALUE;
     uint32_t adc_voltage_mv = (adc_value * VREF_MV) / ADC_MAX_VALUE;
+    uint32_t adc2_voltage_mv = (adc2_value * VREF_MV) / ADC_MAX_VALUE;
     
     // Calculate current from ADC voltage (μA単位)
     // I = (V_adc - 0.5V) / (88kΩ) where V_adc is in V, I is in A
     // Convert to μA: I_uA = (V_adc - 0.5V) / 88000Ω * 1000000
+    // Calculate current from ADC1 voltage (μA単位)
     float voltage_v = adc_voltage_mv / 1000.0f; // mV to V
     float current_ua = (voltage_v - 0.5f) / 88000.0f * 1000000.0f; // Calculate current in μA
+    
+    // Calculate current from ADC2 voltage (μA単位) - OPAMP2経由
+    float voltage2_v = adc2_voltage_mv / 1000.0f; // mV to V
+    float current2_ua = (voltage2_v - 0.5f) / 88000.0f * 1000000.0f; // Calculate current in μA
     
     // Accumulate values for UART averaging (with overflow protection)
     if (adc_count_for_uart < MAX_SAMPLES_PER_INTERVAL) {
@@ -449,6 +484,10 @@ int main(void)
         adc_count_for_uart = 0;
         last_uart_time = current_time;
     }
+    // Output DAC and ADC values via UART
+    printf("DAC:%lu %lumV -> ADC1:%lu %lumV (%.1f uA) | ADC2:%lu %lumV (%.1f uA)\r\n", 
+           dac_value, dac_voltage_mv, adc_value, adc_voltage_mv, current_ua, 
+           adc2_value, adc2_voltage_mv, current2_ua);
     
     // Update LCD display every 10 iterations to reduce flicker
     static uint32_t lcd_update_counter = 0;
@@ -465,15 +504,25 @@ int main(void)
         snprintf(dac_str, sizeof(dac_str), "DAC: %lumV [%d/5]", dac_voltage_mv, current_voltage_index + 1);
         LCD_DrawString4bit(30, dac_str);
         
-        // Display ADC voltage (mV)
+        // Display ADC1 voltage (mV)
         char adc_str[32];
-        snprintf(adc_str, sizeof(adc_str), "ADC: %lu mV", adc_voltage_mv);
+        snprintf(adc_str, sizeof(adc_str), "ADC1: %lu mV", adc_voltage_mv);
         LCD_DrawString4bit(50, adc_str);
         
-        // Display calculated current (μA)
+        // Display ADC2 voltage (mV)
+        char adc2_str[32];
+        snprintf(adc2_str, sizeof(adc2_str), "ADC2: %lu mV", adc2_voltage_mv);
+        LCD_DrawString4bit(70, adc2_str);
+        
+        // Display calculated current from ADC1 (μA)
         char current_str[32];
-        snprintf(current_str, sizeof(current_str), "Current: %.1f uA", current_ua);
-        LCD_DrawString4bit(70, current_str);
+        snprintf(current_str, sizeof(current_str), "I1: %.1f uA", current_ua);
+        LCD_DrawString4bit(90, current_str);
+        
+        // Display calculated current from ADC2 (μA)
+        char current2_str[32];
+        snprintf(current2_str, sizeof(current2_str), "I2: %.1f uA", current2_ua);
+        LCD_DrawString4bit(110, current2_str);
     }
     
     // Keep existing ADS1299 functionality (reduced frequency)
