@@ -360,10 +360,10 @@ int main(void)
     uint32_t adc_voltage_mv = (adc_value * VREF_MV) / ADC_MAX_VALUE;
     
     // Calculate current from ADC voltage (μA単位)
-    // I = (V_adc - 0.5V) / (151kΩ) where V_adc is in V, I is in A
-    // Convert to μA: I_uA = (V_adc - 0.5V) / 151000Ω * 1000000
+    // I = (V_adc - 0.5V) / (88kΩ) where V_adc is in V, I is in A
+    // Convert to μA: I_uA = (V_adc - 0.5V) / 88000Ω * 1000000
     float voltage_v = adc_voltage_mv / 1000.0f; // mV to V
-    float current_ua = (voltage_v - 0.5f) / 151000.0f * 1000000.0f; // Calculate current in μA
+    float current_ua = (voltage_v - 0.5f) / 88000.0f * 1000000.0f; // Calculate current in μA
     
     // Accumulate values for UART averaging (with overflow protection)
     if (adc_count_for_uart < MAX_SAMPLES_PER_INTERVAL) {
@@ -424,10 +424,6 @@ int main(void)
         char current_str[32];
         snprintf(current_str, sizeof(current_str), "Current: %.1f uA", current_ua);
         LCD_DrawString4bit(70, current_str);
-        
-        // Display button instruction
-        LCD_DrawString4bit(70, "Press USER button");
-        LCD_DrawString4bit(90, "to shift voltage");
     }
     
     // Keep existing ADS1299 functionality (reduced frequency)
@@ -435,23 +431,23 @@ int main(void)
     ads_counter++;
     
     if (ads_counter % ADS_CHECK_INTERVAL == 0) { // Every 50th iteration (less frequent for better LCD performance)
-        uint8_t device_id = ads_read_reg(REG_ID);
+        //uint8_t device_id = ads_read_reg(REG_ID);
         // printf("ADS1299 ID: 0x%02X\r\n", device_id);
         
         // Display ADS1299 info on LCD (moved to line 110 to avoid overlap)
-        char ads_str[22];
+        //char ads_str[22];
         // snprintf(ads_str, sizeof(ads_str), "ADS ID: 0x%02X", device_id);
-        LCD_DrawString4bit(110, ads_str);
+        //LCD_DrawString4bit(110, ads_str);
         
         // Check DRDY pin and read data if available
         if (HAL_GPIO_ReadPin(ADS_DRDY_PORT, ADS_DRDY_PIN) == GPIO_PIN_RESET) {
-            int32_t ch1_val = ads_read_ch1_data();
+            //int32_t ch1_val = ads_read_ch1_data();
             // printf("ADS CH1: %ld\r\n", ch1_val);
             
             // Display ADS1299 CH1 data on LCD
-            char ch1_str[22];
+            //char ch1_str[22];
             // snprintf(ch1_str, sizeof(ch1_str), "CH1: %ld", ch1_val);
-            LCD_DrawString4bit(110, ch1_str);
+            //LCD_DrawString4bit(110, ch1_str);
         }
     }
     
