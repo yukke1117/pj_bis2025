@@ -104,6 +104,8 @@ UART_HandleTypeDef huart5;
   static volatile uint8_t button_was_pressed = 0;  // ボタン押下検出フラグ
   static uint32_t last_button_time = 0;  // デバウンス用のタイムスタンプ
   volatile uint8_t button_request_change = 0;  // 割り込みからのボタン変更要求フラグ
+static uint8_t button_press_count = 0;  // ボタン押下回数カウンタ
+static uint8_t image_display_mode = 1;  // 画像表示モード（1: 表示中, 0: 通常モード）
 
   // ADS1299のSPIハンドル (MX_SPI2_Init()で初期化されるもの)
   extern SPI_HandleTypeDef hspi2;
@@ -244,14 +246,9 @@ int main(void)
   LCD_Init();
   printf("LCD Initialized\r\n");
 
-  // 画像を表示
+  // 画像を表示（ボタンが押されるまで継続）
   LCD_DrawImage();
-  HAL_Delay(3000);
-  LCD_FillWhite(); // 一時的にコメントアウト
-
-  // LCD初期表示
-  LCD_DrawString4bit(10, "DAC/ADC Test");
-  LCD_DrawString4bit(30, "System Ready");
+  printf("Displaying image. Press button to continue...\r\n");
   
   // Start DAC
   if (HAL_DAC_Start(&hdac1, DAC_CHANNEL_1) != HAL_OK) {
@@ -331,19 +328,34 @@ int main(void)
         
         // デバウンス処理: 最後のボタン押下から200ms以上経過していることを確認
         if ((current_time - last_button_time) > 200) {
-            // 割り込み無効化して安全に電圧レベルを変更
-            __disable_irq();
-            current_voltage_index = (current_voltage_index + 1) % num_voltage_levels;
-            dac_value = dac_voltage_levels[current_voltage_index];
-            button_request_change = 0;  // フラグをクリア
-            __enable_irq();
+            button_press_count++;  // ボタン押下回数をカウント
             
-            // Debug output with actual voltage calculation
-            uint32_t actual_voltage_mv = (dac_value * VREF_MV) / ADC_MAX_VALUE;
-            printf("Button pressed! Switching to %lumV (index: %d, DAC: %lu)\r\n", 
-                   actual_voltage_mv, current_voltage_index, dac_value);
+            if (button_press_count == 1) {
+                // 1回目のボタン押下: 画像表示モードを終了
+                image_display_mode = 0;
+                button_request_change = 0;  // フラグをクリア
+                printf("First button press - exiting image display mode\r\n");
+                
+                // 通常の監視画面を初期化
+                LCD_FillWhite();
+                LCD_DrawString4bit(10, "DAC/ADC Test");
+                LCD_DrawString4bit(30, "System Ready");
+            } else {
+                // 2回目以降のボタン押下: DAC電圧を変更
+                __disable_irq();
+                current_voltage_index = (current_voltage_index + 1) % num_voltage_levels;
+                dac_value = dac_voltage_levels[current_voltage_index];
+                button_request_change = 0;  // フラグをクリア
+                __enable_irq();
+                
+                // Debug output with actual voltage calculation
+                uint32_t actual_voltage_mv = (dac_value * VREF_MV) / ADC_MAX_VALUE;
+                printf("Button pressed! (Count: %d) Switching to %lumV (index: %d, DAC: %lu)\r\n", 
+                       button_press_count, actual_voltage_mv, current_voltage_index, dac_value);
+                
+                button_was_pressed = 1;  // Set flag for LCD update
+            }
             
-            button_was_pressed = 1;  // Set flag for LCD update
             last_button_time = current_time;  // デバウンス用のタイムスタンプ更新
         } else {
             // デバウンス期間中の場合はフラグをクリア
@@ -351,6 +363,12 @@ int main(void)
         }
         
         BspButtonState = BUTTON_RELEASED;  // Reset state
+    }
+    
+    // 画像表示モード中は画像を表示し続ける
+    if (image_display_mode == 1) {
+        HAL_Delay(100);  // 待機
+        continue;  // メインループの他の処理をスキップ
     }
     
     // Set new DAC value with stabilization delay
