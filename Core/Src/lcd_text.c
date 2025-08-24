@@ -110,48 +110,37 @@ void LCD_BlinkText(uint16_t y0, const char *str, uint8_t visible)
 
 void LCD_DrawImage(void)
 {
-    uint8_t rowbuf[88]; // 176px / 2 pixels_per_byte = 88 bytes
+    // 176px / 2 pixels_per_byte = 88 bytes （1行ぶん）
+    uint8_t rowbuf[88];
 
-    // The image data is 24bpp (3 bytes per pixel)
-    const uint8_t bytes_per_pixel = 3; 
+    const uint8_t bytes_per_pixel = 3;
     const uint16_t bytes_per_row = Image_logo.width * bytes_per_pixel;
 
     for (uint16_t y = 0; y < Image_logo.height; y++) {
-        // Clear the line buffer for the new line
         memset(rowbuf, 0, sizeof(rowbuf));
 
-        // Get a pointer to the start of the current row in the source image
         const uint8_t *p_src_row = &Image_logo.data[y * bytes_per_row];
 
-        // Process each pixel in the row
         for (uint16_t x = 0; x < Image_logo.width; x++) {
-            // Get the R, G, B values for the current pixel
             const uint8_t *p_pixel = &p_src_row[x * bytes_per_pixel];
-            uint8_t r = p_pixel[0];
-            uint8_t g = p_pixel[1];
-            uint8_t b = p_pixel[2];
+            uint8_t r = (p_pixel[0] > 127) ? 1 : 0;
+            uint8_t g = (p_pixel[1] > 127) ? 1 : 0;
+            uint8_t b = (p_pixel[2] > 127) ? 1 : 0;
 
-            // Convert 24bpp pixel to monochrome 4bpp pixel
-            // Using a simple luminance threshold.
-            // (R+G+B)/3 > 127
-            uint8_t pix4;
-            if ((r + g + b) > 382) { // 127 * 3 = 381
-                pix4 = PIX_OFF; // White
-            } else {
-                pix4 = PIX_ON; // Black
-            }
+            // R,G,B,Dummy を 4bit にパック
+            uint8_t pix4 = (r << 3) | (g << 2) | (b << 1) | 0;
 
-            // Pack the 4bpp pixel into the row buffer
-            // 2 pixels per byte: even x in high nibble, odd x in low nibble
+            // 偶数xは上位4bit, 奇数xは下位4bit
             uint16_t byte_idx = x / 2;
-            if (x & 1) { // odd pixel
-                rowbuf[byte_idx] |= pix4; // low nibble
-            } else { // even pixel
-                rowbuf[byte_idx] |= pix4 << 4; // high nibble
+            if (x & 1) {
+                rowbuf[byte_idx] |= pix4 & 0x0F;
+            } else {
+                rowbuf[byte_idx] |= (pix4 << 4) & 0xF0;
             }
         }
 
-        // Send the packed line to the LCD
+        // 1ライン転送
         LCD_SendLine4bit(y, rowbuf);
     }
 }
+
