@@ -410,10 +410,11 @@ int main(void)
     uint32_t adc_voltage_mv = (adc_value * VREF_MV) / ADC_MAX_VALUE;
     
     // Calculate current from ADC voltage (μA単位)
-    // I = (V_adc - 0.5V) / (88kΩ) where V_adc is in V, I is in A
-    // Convert to μA: I_uA = (V_adc - 0.5V) / 88000Ω * 1000000
-    float voltage_v = adc_voltage_mv / 1000.0f; // mV to V
-    float current_ua = (voltage_v - 0.5f) / 88000.0f * 1000000.0f; // Calculate current in μA
+    // I = (V_adc - V_dac) / (88kΩ) where V_adc and V_dac are in V, I is in A
+    // Convert to μA: I_uA = (V_adc - V_dac) / 88000Ω * 1000000
+    float adc_voltage_v = adc_voltage_mv / 1000.0f; // ADC voltage in V
+    float dac_voltage_v = dac_voltage_mv / 1000.0f; // DAC voltage in V
+    float current_ua = (adc_voltage_v - dac_voltage_v) / 88000.0f * 1000000.0f; // Calculate current in μA
     
     // Accumulate values for UART averaging (with overflow protection)
     if (adc_count_for_uart < MAX_SAMPLES_PER_INTERVAL) {
