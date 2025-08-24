@@ -104,7 +104,7 @@ UART_HandleTypeDef huart5;
   static volatile uint8_t button_was_pressed = 0;  // ボタン押下検出フラグ
   static uint32_t last_button_time = 0;  // デバウンス用のタイムスタンプ
   volatile uint8_t button_request_change = 0;  // 割り込みからのボタン変更要求フラグ
-static uint8_t button_press_count = 0;  // ボタン押下回数カウンタ
+static uint16_t button_press_count = 0;  // ボタン押下回数カウンタ (uint16_tでオーバーフロー対策)
 static uint8_t image_display_mode = 1;  // 画像表示モード（1: 表示中, 0: 通常モード）
 
   // ADS1299のSPIハンドル (MX_SPI2_Init()で初期化されるもの)
@@ -122,6 +122,9 @@ static uint8_t image_display_mode = 1;  // 画像表示モード（1: 表示中,
   // UARTデバッグ用 (MX_UART5_Init()で初期化されるもの)
   extern UART_HandleTypeDef huart5;
   #define ADS_UART_HANDLE &huart5
+
+  // ボタンデバウンス時間の定義
+  #define BUTTON_DEBOUNCE_MS 200
 
   // コマンドとレジスタの定義
   // ADS1299のコマンド
@@ -326,9 +329,12 @@ int main(void)
     if (button_request_change == 1) {
         uint32_t current_time = HAL_GetTick();
         
-        // デバウンス処理: 最後のボタン押下から200ms以上経過していることを確認
-        if ((current_time - last_button_time) > 200) {
-            button_press_count++;  // ボタン押下回数をカウント
+        // デバウンス処理: 最後のボタン押下からBUTTON_DEBOUNCE_MS以上経過していることを確認
+        if ((current_time - last_button_time) > BUTTON_DEBOUNCE_MS) {
+            // ボタン押下回数をアトミックにインクリメント（競合状態対策）
+            __disable_irq();
+            button_press_count++;
+            __enable_irq();
             
             if (button_press_count == 1) {
                 // 1回目のボタン押下: 画像表示モードを終了
@@ -350,7 +356,7 @@ int main(void)
                 
                 // Debug output with actual voltage calculation
                 uint32_t actual_voltage_mv = (dac_value * VREF_MV) / ADC_MAX_VALUE;
-                printf("Button pressed! (Count: %d) Switching to %lumV (index: %d, DAC: %lu)\r\n", 
+                printf("Button pressed! (Count: %u) Switching to %lumV (index: %d, DAC: %lu)\r\n", 
                        button_press_count, actual_voltage_mv, current_voltage_index, dac_value);
                 
                 button_was_pressed = 1;  // Set flag for LCD update
@@ -428,10 +434,11 @@ int main(void)
     uint32_t adc_voltage_mv = (adc_value * VREF_MV) / ADC_MAX_VALUE;
     
     // Calculate current from ADC voltage (μA単位)
-    // I = (V_adc - 0.5V) / (88kΩ) where V_adc is in V, I is in A
-    // Convert to μA: I_uA = (V_adc - 0.5V) / 88000Ω * 1000000
-    float voltage_v = adc_voltage_mv / 1000.0f; // mV to V
-    float current_ua = (voltage_v - 0.5f) / 88000.0f * 1000000.0f; // Calculate current in μA
+    // I = (V_adc - V_dac) / (88kΩ) where V_adc and V_dac are in V, I is in A
+    // Convert to μA: I_uA = (V_adc - V_dac) / 88000Ω * 1000000
+    float adc_voltage_v = adc_voltage_mv / 1000.0f; // ADC voltage in V
+    float dac_voltage_v = dac_voltage_mv / 1000.0f; // DAC voltage in V
+    float current_ua = (adc_voltage_v - dac_voltage_v) / 88000.0f * 1000000.0f; // Calculate current in μA
     
     // Accumulate values for UART averaging (with overflow protection)
     if (adc_count_for_uart < MAX_SAMPLES_PER_INTERVAL) {
