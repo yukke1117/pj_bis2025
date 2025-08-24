@@ -1,7 +1,0 @@
-../Core/Src/lcd.c:14:20:LCD_SELECT	8	static
-../Core/Src/lcd.c:15:20:LCD_UNSELECT	8	static
-../Core/Src/lcd.c:16:20:lcd_tx	16	static
-../Core/Src/lcd.c:21:6:LCD_Init	8	static
-../Core/Src/lcd.c:35:6:LCD_AllClear	16	static
-../Core/Src/lcd.c:43:6:LCD_SendLine4bit	112	static
-../Core/Src/lcd.c:59:6:LCD_FillWhite	104	static

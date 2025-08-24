@@ -1,5 +1,0 @@
-../Core/Src/lcd_text.c:11:6:LCD_DrawString4bit	128	static
-../Core/Src/lcd_text.c:44:6:LCD_ScrollText	128	static
-../Core/Src/lcd_text.c:84:6:LCD_BounceText	16	static
-../Core/Src/lcd_text.c:94:6:LCD_BlinkText	112	static
-../Core/Src/lcd_text.c:111:6:LCD_DrawImage	120	static
