@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 ../Core/Src/main.c:194:5:main	13
 ../Core/Src/main.c:429:6:SystemClock_Config	6
 ../Core/Src/main.c:495:13:MX_ADC1_Init	3
@@ -17,3 +18,24 @@
 ../Core/Src/main.c:1083:16:ads_read_ch1_data	2
 ../Core/Src/main.c:1116:6:BSP_PB_Callback	2
 ../Core/Src/main.c:1138:6:Error_Handler	1
+=======
+../Core/Src/main.c:205:5:main	25
+../Core/Src/main.c:517:6:SystemClock_Config	6
+../Core/Src/main.c:583:13:MX_ADC1_Init	3
+../Core/Src/main.c:640:13:MX_ADC2_Init	3
+../Core/Src/main.c:697:13:MX_DAC1_Init	4
+../Core/Src/main.c:755:13:MX_OPAMP1_Init	2
+../Core/Src/main.c:785:13:MX_OPAMP2_Init	2
+../Core/Src/main.c:815:13:MX_SPI1_Init	3
+../Core/Src/main.c:872:13:MX_SPI2_Init	3
+../Core/Src/main.c:929:13:MX_TIM3_Init	6
+../Core/Src/main.c:988:13:MX_UART5_Init	5
+../Core/Src/main.c:1036:13:MX_GPIO_Init	1
+../Core/Src/main.c:1085:13:ads_send_command	1
+../Core/Src/main.c:1099:13:ads_write_reg	1
+../Core/Src/main.c:1117:16:ads_read_reg	1
+../Core/Src/main.c:1138:13:ads_init	2
+../Core/Src/main.c:1174:16:ads_read_ch1_data	2
+../Core/Src/main.c:1207:6:BSP_PB_Callback	2
+../Core/Src/main.c:1224:6:Error_Handler	1
+>>>>>>> e989eefb10c10ba99cab6fe35b31cbdc9e45f987
