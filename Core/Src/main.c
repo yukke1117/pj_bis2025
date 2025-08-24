@@ -443,14 +443,12 @@ int main(void)
     // I = (V_adc - 0.5V) / (88kΩ) where V_adc is in V, I is in A
     // Convert to μA: I_uA = (V_adc - 0.5V) / 88000Ω * 1000000
     // Calculate current from ADC1 voltage (μA単位)
-    // I = (V_adc - 0.5V) / (151kΩ) where V_adc is in V, I is in A
-    // Convert to μA: I_uA = (V_adc - 0.5V) / 151000Ω * 1000000
     float voltage_v = adc_voltage_mv / 1000.0f; // mV to V
-    float current_ua = (voltage_v - 0.5f) / 151000.0f * 1000000.0f; // Calculate current in μA
+    float current_ua = (voltage_v - 0.5f) / 88000.0f * 1000000.0f; // Calculate current in μA
     
     // Calculate current from ADC2 voltage (μA単位) - OPAMP2経由
     float voltage2_v = adc2_voltage_mv / 1000.0f; // mV to V
-    float current2_ua = (voltage2_v - 0.5f) / 151000.0f * 1000000.0f; // Calculate current in μA
+    float current2_ua = (voltage2_v - 0.5f) / 88000.0f * 1000000.0f; // Calculate current in μA
     
     // Accumulate values for UART averaging (with overflow protection)
     if (adc_count_for_uart < MAX_SAMPLES_PER_INTERVAL) {
