@@ -34,6 +34,8 @@
 // Display and timing constants
 #define LCD_UPDATE_INTERVAL 10
 #define ADS_CHECK_INTERVAL 50
+#define UART_TRANSMISSION_INTERVAL_MS 1000  // UART transmission interval in milliseconds
+#define MAX_SAMPLES_PER_INTERVAL 100  // Maximum samples to prevent overflow
 #define VREF_MV 3300
 #define ADC_MAX_VALUE 4095
 /* USER CODE END PD */
@@ -71,6 +73,13 @@ UART_HandleTypeDef huart5;
   
   // UART buffer for ADS1299 debug output
   static char uart_buf[100];
+  
+  // Variables for UART timing and averaging
+  static uint32_t last_uart_time = 0;  // Last UART transmission time
+  static uint32_t adc_count_for_uart = 0;  // Sample count
+  static float current_sum_for_uart = 0.0f;  // Current sum for averaging
+  // Static buffer for UART output to reduce stack usage
+  static char uart_output[50];
 
   // DAC and ADC test variables
   // DAC電圧値の配列 (100mV, 200mV, 300mV, 400mV, 500mV)
@@ -94,6 +103,8 @@ UART_HandleTypeDef huart5;
   static uint32_t adc_value = 0;
   static uint32_t adc2_value = 0;  // ADC2の測定値
   static volatile uint8_t button_was_pressed = 0;  // ボタン押下検出フラグ
+  static uint32_t last_button_time = 0;  // デバウンス用のタイムスタンプ
+  volatile uint8_t button_request_change = 0;  // 割り込みからのボタン変更要求フラグ
 
   // ADS1299のSPIハンドル (MX_SPI2_Init()で初期化されるもの)
   extern SPI_HandleTypeDef hspi2;
@@ -315,8 +326,7 @@ int main(void)
 
   /* USER CODE BEGIN BSP */
 
-  /* -- Sample board code to send message over COM1 port ---- */
-  printf("Welcome to STM32 world !\n\r");
+
 
   /* USER CODE END BSP */
 
@@ -324,37 +334,85 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    // Check if button was pressed in interrupt
-    if (BspButtonState == BUTTON_PRESSED) {
-        // Debug output with actual voltage calculation
-        uint32_t actual_voltage_mv = (dac_value * VREF_MV) / ADC_MAX_VALUE;
-        printf("Button pressed! Switching to %lumV (index: %d, DAC: %lu)\r\n", 
-               actual_voltage_mv, current_voltage_index, dac_value);
+    // Check if button change was requested in interrupt
+    if (button_request_change == 1) {
+        uint32_t current_time = HAL_GetTick();
         
-        button_was_pressed = 1;  // Set flag for LCD update
+        // デバウンス処理: 最後のボタン押下から200ms以上経過していることを確認
+        if ((current_time - last_button_time) > 200) {
+            // 割り込み無効化して安全に電圧レベルを変更
+            __disable_irq();
+            current_voltage_index = (current_voltage_index + 1) % num_voltage_levels;
+            dac_value = dac_voltage_levels[current_voltage_index];
+            button_request_change = 0;  // フラグをクリア
+            __enable_irq();
+            
+            // Debug output with actual voltage calculation
+            uint32_t actual_voltage_mv = (dac_value * VREF_MV) / ADC_MAX_VALUE;
+            printf("Button pressed! Switching to %lumV (index: %d, DAC: %lu)\r\n", 
+                   actual_voltage_mv, current_voltage_index, dac_value);
+            
+            button_was_pressed = 1;  // Set flag for LCD update
+            last_button_time = current_time;  // デバウンス用のタイムスタンプ更新
+        } else {
+            // デバウンス期間中の場合はフラグをクリア
+            button_request_change = 0;
+        }
+        
         BspButtonState = BUTTON_RELEASED;  // Reset state
     }
     
-    // Set new DAC value
+    // Set new DAC value with stabilization delay
     HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, dac_value);
+    HAL_Delay(2);  // DAC安定化のための短い遅延
     
     // Read ADC value from the DAC output (via OPAMP follower) - 複数回測定して平均化
+    // DAC設定後の安定化待機
+    HAL_Delay(5);  // DAC/OPAMP安定化のための追加遅延
+    
     uint32_t adc_sum = 0;
-    const uint8_t num_samples = 10; // 10回測定して平均
+    const uint8_t num_samples = 16; // 16回測定して平均（より安定した値を取得）
+    uint32_t adc_readings[16];  // 個別の測定値を保存
+    uint8_t valid_samples = 0;
     
     for (uint8_t i = 0; i < num_samples; i++) {
         if (HAL_ADC_Start(&hadc1) != HAL_OK) {
             printf("ADC Start Error!\r\n");
-            break;
+            continue;  // エラーでも続行
         }
         
-        if (HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY) == HAL_OK) {
-            adc_sum += HAL_ADC_GetValue(&hadc1);
+        if (HAL_ADC_PollForConversion(&hadc1, 10) == HAL_OK) {  // タイムアウトを10msに設定
+            uint32_t reading = HAL_ADC_GetValue(&hadc1);
+            adc_readings[valid_samples] = reading;
+            adc_sum += reading;
+            valid_samples++;
         }
         HAL_ADC_Stop(&hadc1);
-        HAL_Delay(1); // 測定間の短い遅延
+        HAL_Delay(2); // 測定間の遅延を少し増やす
     }
     
+    // 有効なサンプルがある場合のみ平均値を計算
+    if (valid_samples > 0) {
+        adc_value = adc_sum / valid_samples;
+        
+        // 外れ値を除外した平均値を再計算（オプション）
+        if (valid_samples >= 8) {
+            // 中央値付近の値のみで再計算
+            uint32_t sorted_sum = 0;
+            uint8_t counted = 0;
+            for (uint8_t i = 0; i < valid_samples; i++) {
+                // 平均値から±10%以内の値のみを使用
+                if (adc_readings[i] >= (adc_value * 9 / 10) && 
+                    adc_readings[i] <= (adc_value * 11 / 10)) {
+                    sorted_sum += adc_readings[i];
+                    counted++;
+                }
+            }
+            if (counted > 0) {
+                adc_value = sorted_sum / counted;
+            }
+        }
+    }
     adc_value = adc_sum / num_samples; // 平均値を計算
     
     // Read ADC2 value (OPAMP2 via voltage follower) - 複数回測定して平均化
@@ -381,6 +439,9 @@ int main(void)
     uint32_t adc_voltage_mv = (adc_value * VREF_MV) / ADC_MAX_VALUE;
     uint32_t adc2_voltage_mv = (adc2_value * VREF_MV) / ADC_MAX_VALUE;
     
+    // Calculate current from ADC voltage (μA単位)
+    // I = (V_adc - 0.5V) / (88kΩ) where V_adc is in V, I is in A
+    // Convert to μA: I_uA = (V_adc - 0.5V) / 88000Ω * 1000000
     // Calculate current from ADC1 voltage (μA単位)
     // I = (V_adc - 0.5V) / (151kΩ) where V_adc is in V, I is in A
     // Convert to μA: I_uA = (V_adc - 0.5V) / 151000Ω * 1000000
@@ -391,6 +452,40 @@ int main(void)
     float voltage2_v = adc2_voltage_mv / 1000.0f; // mV to V
     float current2_ua = (voltage2_v - 0.5f) / 151000.0f * 1000000.0f; // Calculate current in μA
     
+    // Accumulate values for UART averaging (with overflow protection)
+    if (adc_count_for_uart < MAX_SAMPLES_PER_INTERVAL) {
+        current_sum_for_uart += current_ua;
+        adc_count_for_uart++;
+    }
+    
+    // Send UART message every 1 second
+    uint32_t current_time = HAL_GetTick();
+    // Handle tick overflow (wraps around after ~49 days)
+    if ((current_time >= last_uart_time && (current_time - last_uart_time) >= UART_TRANSMISSION_INTERVAL_MS) ||
+        (current_time < last_uart_time && (current_time + (0xFFFFFFFF - last_uart_time)) >= UART_TRANSMISSION_INTERVAL_MS)) {
+        if (adc_count_for_uart > 0) {
+            // Calculate average values
+            float avg_current_ua = current_sum_for_uart / adc_count_for_uart;
+            
+            // Format and send UART message: voltage(V) , current(uA)
+            float dac_voltage_v = dac_voltage_mv / 1000.0f;  // Convert mV to V
+            snprintf(uart_output, sizeof(uart_output), "%.3f , %.1f\r\n", dac_voltage_v, avg_current_ua);
+            printf(uart_output);
+            
+            // Debug: show sample count
+            // printf("Debug: %lu samples averaged\r\n", adc_count_for_uart);
+        } else {
+            // If no samples, still send a message with current value
+            float dac_voltage_v = dac_voltage_mv / 1000.0f;
+            snprintf(uart_output, sizeof(uart_output), "%.3f , %.1f\r\n", dac_voltage_v, current_ua);
+            printf(uart_output);
+        }
+        
+        // Reset accumulation variables
+        current_sum_for_uart = 0.0f;
+        adc_count_for_uart = 0;
+        last_uart_time = current_time;
+    }
     // Output DAC and ADC values via UART
     printf("DAC:%lu %lumV -> ADC1:%lu %lumV (%.1f uA) | ADC2:%lu %lumV (%.1f uA)\r\n", 
            dac_value, dac_voltage_mv, adc_value, adc_voltage_mv, current_ua, 
@@ -437,23 +532,23 @@ int main(void)
     ads_counter++;
     
     if (ads_counter % ADS_CHECK_INTERVAL == 0) { // Every 50th iteration (less frequent for better LCD performance)
-        uint8_t device_id = ads_read_reg(REG_ID);
-        printf("ADS1299 ID: 0x%02X\r\n", device_id);
+        //uint8_t device_id = ads_read_reg(REG_ID);
+        // printf("ADS1299 ID: 0x%02X\r\n", device_id);
         
         // Display ADS1299 info on LCD (moved to line 110 to avoid overlap)
-        char ads_str[22];
-        snprintf(ads_str, sizeof(ads_str), "ADS ID: 0x%02X", device_id);
-        LCD_DrawString4bit(110, ads_str);
+        //char ads_str[22];
+        // snprintf(ads_str, sizeof(ads_str), "ADS ID: 0x%02X", device_id);
+        //LCD_DrawString4bit(110, ads_str);
         
         // Check DRDY pin and read data if available
         if (HAL_GPIO_ReadPin(ADS_DRDY_PORT, ADS_DRDY_PIN) == GPIO_PIN_RESET) {
-            int32_t ch1_val = ads_read_ch1_data();
-            printf("ADS CH1: %ld\r\n", ch1_val);
+            //int32_t ch1_val = ads_read_ch1_data();
+            // printf("ADS CH1: %ld\r\n", ch1_val);
             
             // Display ADS1299 CH1 data on LCD
-            char ch1_str[22];
-            snprintf(ch1_str, sizeof(ch1_str), "CH1: %ld", ch1_val);
-            LCD_DrawString4bit(110, ch1_str);
+            //char ch1_str[22];
+            // snprintf(ch1_str, sizeof(ch1_str), "CH1: %ld", ch1_val);
+            //LCD_DrawString4bit(110, ch1_str);
         }
     }
     
@@ -677,11 +772,14 @@ static void MX_DAC1_Init(void)
   sConfig.DAC_HighFrequency = DAC_HIGH_FREQUENCY_INTERFACE_MODE_DISABLE;
   sConfig.DAC_DMADoubleDataMode = DISABLE;
   sConfig.DAC_SignedFormat = DISABLE;
-  sConfig.DAC_SampleAndHold = DAC_SAMPLEANDHOLD_DISABLE;
+  sConfig.DAC_SampleAndHold = DAC_SAMPLEANDHOLD_ENABLE;  // サンプル&ホールドを有効化して安定性向上
   sConfig.DAC_Trigger = DAC_TRIGGER_NONE;
   sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_ENABLE;
   sConfig.DAC_ConnectOnChipPeripheral = DAC_CHIPCONNECT_EXTERNAL;
   sConfig.DAC_UserTrimming = DAC_TRIMMING_FACTORY;
+  sConfig.DAC_SampleAndHoldConfig.DAC_SampleTime = 10;  // サンプル時間を設定（10サイクル）
+  sConfig.DAC_SampleAndHoldConfig.DAC_HoldTime = 10;    // ホールド時間を設定（10サイクル）
+  sConfig.DAC_SampleAndHoldConfig.DAC_RefreshTime = 10; // リフレッシュ時間を設定（10サイクル）
   if (HAL_DAC_ConfigChannel(&hdac1, &sConfig, DAC_CHANNEL_1) != HAL_OK)
   {
     Error_Handler();
@@ -1161,16 +1259,11 @@ void BSP_PB_Callback(Button_TypeDef Button)
 {
   if (Button == BUTTON_USER)
   {
-    // 直接割り込みハンドラ内で電圧レベルを切り替える
-    extern volatile uint8_t current_voltage_index;
-    extern const uint32_t dac_voltage_levels[];
-    extern volatile uint32_t dac_value;
-    extern const uint8_t num_voltage_levels;
+    // 割り込みハンドラでは電圧変更要求フラグをセットするのみ
+    extern volatile uint8_t button_request_change;
     
-    // Move to the next voltage level
-    current_voltage_index = (current_voltage_index + 1) % num_voltage_levels;
-    dac_value = dac_voltage_levels[current_voltage_index];
-    
+    // メインループでの処理を要求
+    button_request_change = 1;
     BspButtonState = BUTTON_PRESSED;
   }
 }
