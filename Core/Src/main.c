@@ -34,6 +34,8 @@
 // Display and timing constants
 #define LCD_UPDATE_INTERVAL 10
 #define ADS_CHECK_INTERVAL 50
+#define UART_TRANSMISSION_INTERVAL_MS 1000  // UART transmission interval in milliseconds
+#define MAX_SAMPLES_PER_INTERVAL 100  // Maximum samples to prevent overflow
 #define VREF_MV 3300
 #define ADC_MAX_VALUE 4095
 /* USER CODE END PD */
@@ -71,6 +73,13 @@ UART_HandleTypeDef huart5;
   
   // UART buffer for ADS1299 debug output
   static char uart_buf[100];
+  
+  // Variables for UART timing and averaging
+  static uint32_t last_uart_time = 0;  // Last UART transmission time
+  static uint32_t adc_count_for_uart = 0;  // Sample count
+  static float current_sum_for_uart = 0.0f;  // Current sum for averaging
+  // Static buffer for UART output to reduce stack usage
+  static char uart_output[50];
 
   // DAC and ADC test variables
   // DAC電圧値の配列 (100mV, 200mV, 300mV, 400mV, 500mV)
@@ -308,8 +317,7 @@ int main(void)
 
   /* USER CODE BEGIN BSP */
 
-  /* -- Sample board code to send message over COM1 port ---- */
-  printf("Welcome to STM32 world !\n\r");
+
 
   /* USER CODE END BSP */
 
@@ -402,14 +410,45 @@ int main(void)
     uint32_t adc_voltage_mv = (adc_value * VREF_MV) / ADC_MAX_VALUE;
     
     // Calculate current from ADC voltage (μA単位)
-    // I = (V_adc - 0.5V) / (151kΩ) where V_adc is in V, I is in A
-    // Convert to μA: I_uA = (V_adc - 0.5V) / 151000Ω * 1000000
+    // I = (V_adc - 0.5V) / (88kΩ) where V_adc is in V, I is in A
+    // Convert to μA: I_uA = (V_adc - 0.5V) / 88000Ω * 1000000
     float voltage_v = adc_voltage_mv / 1000.0f; // mV to V
-    float current_ua = (voltage_v - 0.5f) / 151000.0f * 1000000.0f; // Calculate current in μA
+    float current_ua = (voltage_v - 0.5f) / 88000.0f * 1000000.0f; // Calculate current in μA
     
-    // Output DAC and ADC values via UART
-    printf("DAC:%lu %lumV -> ADC:%lu %lumV (%.1f uA)\r\n", 
-           dac_value, dac_voltage_mv, adc_value, adc_voltage_mv, current_ua);
+    // Accumulate values for UART averaging (with overflow protection)
+    if (adc_count_for_uart < MAX_SAMPLES_PER_INTERVAL) {
+        current_sum_for_uart += current_ua;
+        adc_count_for_uart++;
+    }
+    
+    // Send UART message every 1 second
+    uint32_t current_time = HAL_GetTick();
+    // Handle tick overflow (wraps around after ~49 days)
+    if ((current_time >= last_uart_time && (current_time - last_uart_time) >= UART_TRANSMISSION_INTERVAL_MS) ||
+        (current_time < last_uart_time && (current_time + (0xFFFFFFFF - last_uart_time)) >= UART_TRANSMISSION_INTERVAL_MS)) {
+        if (adc_count_for_uart > 0) {
+            // Calculate average values
+            float avg_current_ua = current_sum_for_uart / adc_count_for_uart;
+            
+            // Format and send UART message: voltage(V) , current(uA)
+            float dac_voltage_v = dac_voltage_mv / 1000.0f;  // Convert mV to V
+            snprintf(uart_output, sizeof(uart_output), "%.3f , %.1f\r\n", dac_voltage_v, avg_current_ua);
+            printf(uart_output);
+            
+            // Debug: show sample count
+            // printf("Debug: %lu samples averaged\r\n", adc_count_for_uart);
+        } else {
+            // If no samples, still send a message with current value
+            float dac_voltage_v = dac_voltage_mv / 1000.0f;
+            snprintf(uart_output, sizeof(uart_output), "%.3f , %.1f\r\n", dac_voltage_v, current_ua);
+            printf(uart_output);
+        }
+        
+        // Reset accumulation variables
+        current_sum_for_uart = 0.0f;
+        adc_count_for_uart = 0;
+        last_uart_time = current_time;
+    }
     
     // Update LCD display every 10 iterations to reduce flicker
     static uint32_t lcd_update_counter = 0;
@@ -435,10 +474,6 @@ int main(void)
         char current_str[32];
         snprintf(current_str, sizeof(current_str), "Current: %.1f uA", current_ua);
         LCD_DrawString4bit(70, current_str);
-        
-        // Display button instruction
-        LCD_DrawString4bit(70, "Press USER button");
-        LCD_DrawString4bit(90, "to shift voltage");
     }
     
     // Keep existing ADS1299 functionality (reduced frequency)
@@ -446,23 +481,23 @@ int main(void)
     ads_counter++;
     
     if (ads_counter % ADS_CHECK_INTERVAL == 0) { // Every 50th iteration (less frequent for better LCD performance)
-        uint8_t device_id = ads_read_reg(REG_ID);
-        printf("ADS1299 ID: 0x%02X\r\n", device_id);
+        //uint8_t device_id = ads_read_reg(REG_ID);
+        // printf("ADS1299 ID: 0x%02X\r\n", device_id);
         
         // Display ADS1299 info on LCD (moved to line 110 to avoid overlap)
-        char ads_str[22];
-        snprintf(ads_str, sizeof(ads_str), "ADS ID: 0x%02X", device_id);
-        LCD_DrawString4bit(110, ads_str);
+        //char ads_str[22];
+        // snprintf(ads_str, sizeof(ads_str), "ADS ID: 0x%02X", device_id);
+        //LCD_DrawString4bit(110, ads_str);
         
         // Check DRDY pin and read data if available
         if (HAL_GPIO_ReadPin(ADS_DRDY_PORT, ADS_DRDY_PIN) == GPIO_PIN_RESET) {
-            int32_t ch1_val = ads_read_ch1_data();
-            printf("ADS CH1: %ld\r\n", ch1_val);
+            //int32_t ch1_val = ads_read_ch1_data();
+            // printf("ADS CH1: %ld\r\n", ch1_val);
             
             // Display ADS1299 CH1 data on LCD
-            char ch1_str[22];
-            snprintf(ch1_str, sizeof(ch1_str), "CH1: %ld", ch1_val);
-            LCD_DrawString4bit(110, ch1_str);
+            //char ch1_str[22];
+            // snprintf(ch1_str, sizeof(ch1_str), "CH1: %ld", ch1_val);
+            //LCD_DrawString4bit(110, ch1_str);
         }
     }
     
