@@ -82,24 +82,24 @@ UART_HandleTypeDef huart5;
   static char uart_output[50];
 
   // DAC and ADC test variables
-  // DAC電圧値の配列 (100mV, 200mV, 300mV, 400mV, 500mV)
+  // DAC電圧値の配列 (50mV, 100mV, 150mV, 200mV, 250mV)
   // 計算式: DAC_value = (voltage_mV * 4095) / 3300
   // 正確な計算値:
+  // 50mV:  (50 * 4095) / 3300 = 62.04 → 62
   // 100mV: (100 * 4095) / 3300 = 124.09 → 124
+  // 150mV: (150 * 4095) / 3300 = 186.13 → 186
   // 200mV: (200 * 4095) / 3300 = 248.18 → 248
-  // 300mV: (300 * 4095) / 3300 = 372.27 → 372
-  // 400mV: (400 * 4095) / 3300 = 496.36 → 496
-  // 500mV: (500 * 4095) / 3300 = 620.45 → 620
+  // 250mV: (250 * 4095) / 3300 = 310.22 → 310
   const uint32_t dac_voltage_levels[] = {
+      62,   // 50mV (実際: 50.0mV)
       124,  // 100mV (実際: 99.9mV)
+      186,  // 150mV (実際: 150.0mV)
       248,  // 200mV (実際: 199.9mV)
-      372,  // 300mV (実際: 299.9mV)
-      496,  // 400mV (実際: 399.9mV)
-      620   // 500mV (実際: 499.9mV)
+      310   // 250mV (実際: 250.0mV)
   };
   const uint8_t num_voltage_levels = sizeof(dac_voltage_levels) / sizeof(dac_voltage_levels[0]);
   volatile uint8_t current_voltage_index = 0;  // 現在の電圧インデックス（割り込みで変更されるためvolatile）
-  volatile uint32_t dac_value = 124;  // 初期値は100mV（割り込みで変更されるためvolatile）
+  volatile uint32_t dac_value = 62;  // 初期値は50mV（割り込みで変更されるためvolatile）
   static uint32_t adc_value = 0;
   static volatile uint8_t button_was_pressed = 0;  // ボタン押下検出フラグ
   static uint32_t last_button_time = 0;  // デバウンス用のタイムスタンプ
@@ -284,10 +284,11 @@ int main(void)
       Error_Handler();
   }
   printf("ADC Calibrated and Ready\r\n");
-  // Set initial DAC value to match the first voltage level (100mV)
+  // Set initial DAC value to match the first voltage level (50mV)
   dac_value = dac_voltage_levels[current_voltage_index];
   HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, dac_value);
-  printf("Initial DAC value set to: %lu (%dmV)\r\n", dac_value, (current_voltage_index + 1) * 100);
+  uint32_t initial_voltage_mv = (dac_value * VREF_MV) / ADC_MAX_VALUE;
+  printf("Initial DAC value set to: %lu (%lumV)\r\n", dac_value, initial_voltage_mv);
 
   printf("Starting ID Register Read Test...\r\n");
 
